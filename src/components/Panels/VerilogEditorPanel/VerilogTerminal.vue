@@ -11,6 +11,28 @@
             </div>
         </div>
 
+        <!-- Progress Bar -->
+        <div v-if="verilogStore.isSynthesizing" class="synth-progress-wrap">
+            <div class="synth-stage-label" :style="{ color: verilogStore.synthColor }">
+                {{ verilogStore.synthStage }}
+            </div>
+            <div class="synth-bar-track">
+                <div
+                    class="synth-bar-fill"
+                    :style="{
+                        width: verilogStore.synthProgress + '%',
+                        background: verilogStore.synthColor
+                    }"
+                ></div>
+            </div>
+            <div class="synth-pct-label" :style="{ color: verilogStore.synthColor }">
+                {{ verilogStore.synthProgress }}%
+            </div>
+            <div v-if="verilogStore.synthTime" class="synth-time-label">
+                Completed in {{ verilogStore.synthTime }}
+            </div>
+        </div>
+
         <div class="terminal-content" ref="terminalContent">
             <div class="terminal-output">
                 <div v-if="!messages.length" class="default-message">
@@ -30,7 +52,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, onUnmounted, nextTick, readonly, watch } from 'vue'
+import { ref, onUnmounted, nextTick, readonly, watch } from 'vue'
 import { useVerilogStore } from '../../../store/verilogStore'
 
 interface Message {
@@ -47,18 +69,15 @@ const terminalContent = ref<HTMLElement>()
 let isDragging = false
 let startY = 0
 
-// Watch store visibility to trigger side effects
 watch(
     () => verilogStore.isTerminalVisible,
-    () => {
-        adjustCodeWindowHeight()
-    }
+    () => { adjustCodeWindowHeight() }
 )
 
 const adjustCodeWindowHeight = () => {
     const codeWindow = document.getElementById('code-window')
     const codeMirror = codeWindow?.querySelector('.CodeMirror')
-    
+
     if (codeWindow && codeMirror) {
         if (verilogStore.isTerminalVisible) {
             const currentTerminalHeight = terminalHeight.value
@@ -80,7 +99,6 @@ const adjustCodeWindowHeight = () => {
             codeWindow.style.maxWidth = '100%'
             codeWindow.style.overflow = 'hidden'
         }
-        
         if ((window as any).editor && (window as any).editor.refresh) {
             (window as any).editor.refresh()
         }
@@ -88,12 +106,7 @@ const adjustCodeWindowHeight = () => {
 }
 
 const addMessage = (text: string, type: 'info' | 'error' | 'success' = 'info') => {
-    messages.value.push({
-        text,
-        type,
-        timestamp: new Date()
-    })
-    
+    messages.value.push({ text, type, timestamp: new Date() })
     nextTick(() => {
         if (terminalContent.value && verilogStore.isTerminalVisible) {
             terminalContent.value.scrollTop = terminalContent.value.scrollHeight
@@ -101,9 +114,7 @@ const addMessage = (text: string, type: 'info' | 'error' | 'success' = 'info') =
     })
 }
 
-const clearOutput = () => {
-    messages.value = []
-}
+const clearOutput = () => { messages.value = [] }
 
 const startDragging = (e: MouseEvent) => {
     if (isDragging) return
@@ -116,7 +127,6 @@ const startDragging = (e: MouseEvent) => {
 
 const handleDragging = (e: MouseEvent) => {
     if (!isDragging) return
-    
     const deltaY = startY - e.clientY
     const newHeight = Math.max(100, Math.min(600, terminalHeight.value + deltaY))
     terminalHeight.value = newHeight
@@ -131,9 +141,9 @@ const stopDragging = () => {
 }
 
 const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', { 
-        hour12: false, 
-        hour: '2-digit', 
+    return date.toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
     })
@@ -142,10 +152,13 @@ const formatTime = (date: Date) => {
 defineExpose({
     addMessage,
     clearOutput,
-    showTerminal: verilogStore.showTerminal,
-    closeTerminal: verilogStore.hideTerminal,
-    toggleTerminal: verilogStore.toggleTerminal,
-    isVisible: readonly(() => verilogStore.isTerminalVisible)
+    showTerminal:    verilogStore.showTerminal,
+    closeTerminal:   verilogStore.hideTerminal,
+    toggleTerminal:  verilogStore.toggleTerminal,
+    isVisible:       readonly(() => verilogStore.isTerminalVisible),
+    setSynthStage:   verilogStore.setSynthStage,
+    finishSynthesis: verilogStore.finishSynthesis,
+    resetSynthesis:  verilogStore.resetSynthesis,
 })
 
 onUnmounted(() => {
@@ -239,16 +252,8 @@ onUnmounted(() => {
     word-wrap: break-word;
 }
 
-.message.error {
-    color: #ff6b6b;
-}
-
 .message.error .message-text {
     color: #ff6b6b;
-}
-
-.message.success {
-    color: #51cf66;
 }
 
 .message.success .message-text {
@@ -259,7 +264,6 @@ onUnmounted(() => {
     color: var(--text-lite, #ffffff);
 }
 
-/* Scrollbar styling */
 .terminal-content::-webkit-scrollbar {
     width: 8px;
 }
@@ -282,12 +286,8 @@ onUnmounted(() => {
 }
 
 @keyframes slideUp {
-    from {
-        transform: translateY(100%);
-    }
-    to {
-        transform: translateY(0);
-    }
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
 }
 
 :global(.code-window) {
@@ -323,5 +323,52 @@ onUnmounted(() => {
 
 :global(.code-window .CodeMirror-gutters) {
     min-width: auto !important;
+}
+
+/* ── Progress Bar ── */
+.synth-progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 14px;
+    background: var(--bg-navbar, #2d2d2d);
+    border-bottom: 1px solid var(--br-primary, #333);
+}
+
+.synth-stage-label {
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 140px;
+    white-space: nowrap;
+    transition: color 0.3s ease;
+}
+
+.synth-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--bg-primary, #1e1e1e);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.synth-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease, background 0.3s ease;
+}
+
+.synth-pct-label {
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 36px;
+    text-align: right;
+    transition: color 0.3s ease;
+}
+
+.synth-time-label {
+    font-size: 11px;
+    color: #888;
+    white-space: nowrap;
+    margin-left: 6px;
 }
 </style>

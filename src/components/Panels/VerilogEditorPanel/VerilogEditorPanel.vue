@@ -173,4 +173,31 @@ defineExpose({
     max-width: 100% !important;
     box-sizing: border-box !important;
 }
+
+/* Error line highlight */
+:global(.verilog-error-line) {
+    background: rgba(255, 70, 70, 0.2) !important;
+    border-left: 3px solid #ff4444;
+}
+
+/* Autocomplete dropdown */
+:global(.CodeMirror-hints) {
+    background: #1e1e1e !important;
+    border: 1px solid #555 !important;
+    border-radius: 4px !important;
+    font-family: monospace !important;
+    font-size: 13px !important;
+    z-index: 9999 !important;
+}
+
+:global(.CodeMirror-hint) {
+    color: #ccc !important;
+    padding: 3px 10px !important;
+}
+
+:global(.CodeMirror-hint-active) {
+    background: #264f78 !important;
+    color: #fff !important;
+    border-radius: 2px !important;
+}
 </style>

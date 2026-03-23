@@ -38,9 +38,9 @@ import { toRefs } from 'vue'
 var editor
 var verilogMode = false
 
-// ─── WASM worker state ──────────────────────────────────────────────────────
+// ─── WASM worker state ───────────────────────────────────────────────────────
 var wasmWorker = null
-var wasmReadyPromise = null  // single shared promise — prevents duplicate polling
+var wasmReadyPromise = null
 
 function initWasmWorker() {
     if (wasmReadyPromise) return wasmReadyPromise
@@ -120,6 +120,26 @@ export function applyVerilogTheme(theme) {
     localStorage.setItem('verilog-theme', theme)
     editor.setOption('theme', theme)
 }
+
+// ─── Progress bar helpers ────────────────────────────────────────────────────
+function setSynthStage(index) {
+    if (window.verilogTerminal?.setSynthStage) {
+        window.verilogTerminal.setSynthStage(index)
+    }
+}
+
+function finishSynthesis() {
+    if (window.verilogTerminal?.finishSynthesis) {
+        window.verilogTerminal.finishSynthesis()
+    }
+}
+
+function resetSynthesis() {
+    if (window.verilogTerminal?.resetSynthesis) {
+        window.verilogTerminal.resetSynthesis()
+    }
+}
+// ────────────────────────────────────────────────────────────────────────────
 
 function setVerilogOutput(text, type = 'info') {
     if (typeof window !== 'undefined' && window.verilogTerminal) {
@@ -304,7 +324,6 @@ export function YosysJSON2CV(
         }
     }
 
-    // ── skip bad connections instead of crashing ──────────────────────────
     for (var connection in JSON.connectors) {
         var fromId   = JSON.connectors[connection]['from']['id']
         var fromPort = JSON.connectors[connection]['from']['port']
@@ -351,6 +370,7 @@ export default function generateVerilogCircuit(
     scope = globalScope
 ) {
     clearVerilogOutput()
+    setSynthStage(0)
     setVerilogOutput('Compiling Verilog code...', 'info')
 
     if (shouldUseWasm()) {
@@ -375,6 +395,7 @@ function synthesizeWithServer(verilogCode, scope) {
             renderVerilogCircuit(circuitData, verilogCode, scope, 'server')
         })
         .catch((error) => {
+            resetSynthesis()
             if (error.status == 500) {
                 showError('Could not connect to Yosys')
                 setVerilogOutput('Could not connect to Yosys server', 'error')
@@ -399,13 +420,9 @@ function extractTopModule(code) {
         moduleNames.push(match[1])
     }
 
-    // No modules found — let Yosys use -auto-top
     if (moduleNames.length === 0) return null
-
-    // Only one module — unambiguous
     if (moduleNames.length === 1) return moduleNames[0]
 
-    // Multiple modules — find the one that is NOT instantiated inside another
     const instantiated = new Set()
     moduleNames.forEach(name => {
         const instanceRe = new RegExp('\\b' + name + '\\s+\\w+\\s*\\(', 'g')
@@ -415,11 +432,11 @@ function extractTopModule(code) {
     const topCandidates = moduleNames.filter(n => !instantiated.has(n))
     if (topCandidates.length === 1) return topCandidates[0]
 
-    // Ambiguous — let Yosys decide with -auto-top
     return null
 }
 
 function synthesizeWithWasm(verilogCode, scope) {
+    setSynthStage(0)
     setVerilogOutput('Synthesizing with Yosys WASM (client-side, no server)...', 'info')
 
     var readyPromise = initWasmWorker()
@@ -435,6 +452,7 @@ function synthesizeWithWasm(verilogCode, scope) {
             doWasmSynthesis(verilogCode, scope)
         })
         .catch(function (err) {
+            resetSynthesis()
             setVerilogOutput('WASM error: ' + err.message, 'error')
             showError('Yosys WASM failed: ' + err.message)
             wasmReadyPromise = null
@@ -442,7 +460,7 @@ function synthesizeWithWasm(verilogCode, scope) {
 }
 
 function doWasmSynthesis(verilogCode, scope) {
-    const topModule = extractTopModule(verilogCode)  // null = use -auto-top
+    const topModule = extractTopModule(verilogCode)
     const requestId = 'synth-' + Date.now()
 
     console.log('[WASM] Top module:', topModule || '(auto-top)')
@@ -456,9 +474,11 @@ function doWasmSynthesis(verilogCode, scope) {
 
         if (msg.type === 'success') {
             try {
+                setSynthStage(1)
                 var circuitData = convertYosysToDigitalJs(msg.json, topModule)
 
                 if (!circuitData.devices || Object.keys(circuitData.devices).length === 0) {
+                    resetSynthesis()
                     setVerilogOutput(
                         'Synthesis succeeded but no devices were produced. ' +
                         'Check that all module outputs are driven.',
@@ -467,14 +487,35 @@ function doWasmSynthesis(verilogCode, scope) {
                     return
                 }
 
+                // ── Gate count stats ──────────────────────────────
+                const allDevices  = Object.values(circuitData.devices)
+                const gateCount   = allDevices.filter(d =>
+                    !['Input', 'Output', 'Constant'].includes(d.type)
+                ).length
+                const inputCount  = allDevices.filter(d => d.type === 'Input').length
+                const outputCount = allDevices.filter(d => d.type === 'Output').length
+                const wireCount   = circuitData.connectors.length
+                setVerilogOutput(
+                    'Gates: ' + gateCount +
+                    ' | Wires: ' + wireCount +
+                    ' | Inputs: ' + inputCount +
+                    ' | Outputs: ' + outputCount,
+                    'info'
+                )
+                // ─────────────────────────────────────────────────
+
+                setSynthStage(2)
                 console.log('[WASM] Devices:', Object.keys(circuitData.devices).length)
                 setVerilogOutput('Synthesis complete. Running layout...', 'info')
 
+                setSynthStage(3)
                 circuitData = computeLayeredLayout(circuitData)
 
+                setSynthStage(4)
                 setVerilogOutput('Rendering circuit on canvas...', 'info')
                 renderVerilogCircuit(circuitData, verilogCode, scope, 'WASM')
             } catch (err) {
+                resetSynthesis()
                 console.error('[WASM] Render error:', err)
                 setVerilogOutput('Render failed: ' + err.message, 'error')
                 showError('Circuit render failed: ' + err.message)
@@ -482,13 +523,16 @@ function doWasmSynthesis(verilogCode, scope) {
         }
 
         if (msg.type === 'error') {
+            resetSynthesis()
             console.error('[WASM] Synthesis error:', msg.message)
             setVerilogOutput('Synthesis error:\n' + msg.message, 'error')
             showError('Yosys WASM synthesis failed')
+            highlightErrorLine(msg.message)
         }
     }
 
     wasmWorker.onerror = function (err) {
+        resetSynthesis()
         console.error('[WASM] Worker crashed:', err)
         setVerilogOutput('Worker error: ' + err.message, 'error')
         wasmWorker = null
@@ -500,6 +544,154 @@ function doWasmSynthesis(verilogCode, scope) {
         topModule: topModule,
         requestId: requestId
     })
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  FEATURE 6 — Error line highlighting
+// ════════════════════════════════════════════════════════════════════════════
+
+function highlightErrorLine(errorMessage) {
+    if (!editor) return
+
+    if (window._verilogErrorMarker) {
+        window._verilogErrorMarker.clear()
+        window._verilogErrorMarker = null
+    }
+
+    const lineMatch = errorMessage.match(/input\.v:(\d+)/)
+        || errorMessage.match(/:(\d+):/)
+
+    if (!lineMatch) {
+        console.warn('[Highlight] No line number found in error:', errorMessage)
+        return
+    }
+
+    const lineNum = parseInt(lineMatch[1]) - 1
+
+    window._verilogErrorMarker = editor.markText(
+        { line: lineNum, ch: 0 },
+        { line: lineNum, ch: 9999 },
+        { className: 'verilog-error-line' }
+    )
+
+    editor.setCursor({ line: lineNum, ch: 0 })
+    editor.scrollIntoView({ line: lineNum, ch: 0 }, 100)
+
+    console.log('[Highlight] Error at line', lineNum + 1)
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  FEATURE 5 — Verilog-aware autocomplete
+// ════════════════════════════════════════════════════════════════════════════
+
+const VERILOG_KEYWORDS = [
+    'module', 'endmodule', 'input', 'output', 'inout',
+    'wire', 'reg', 'parameter', 'localparam', 'integer',
+    'assign', 'always', 'initial', 'begin', 'end',
+    'if', 'else', 'case', 'casex', 'casez', 'endcase',
+    'for', 'while', 'repeat', 'forever',
+    'posedge', 'negedge', 'default',
+    'and', 'or', 'not', 'xor', 'nand', 'nor', 'xnor'
+]
+
+const VERILOG_SNIPPETS = [
+    {
+        text:        'module',
+        displayText: 'module — full module skeleton',
+        hint: function (cm) {
+            const cur = cm.getCursor()
+            const tok = cm.getTokenAt(cur)
+            cm.replaceRange(
+                'module module_name (\n    input wire clk,\n    input wire rst\n);\n\nendmodule',
+                { line: cur.line, ch: tok.start },
+                { line: cur.line, ch: cur.ch }
+            )
+            cm.setCursor({ line: cur.line + 4, ch: 0 })
+        }
+    },
+    {
+        text:        'always',
+        displayText: 'always — always @(posedge clk)',
+        hint: function (cm) {
+            const cur = cm.getCursor()
+            const tok = cm.getTokenAt(cur)
+            cm.replaceRange(
+                'always @(posedge clk) begin\n    \nend',
+                { line: cur.line, ch: tok.start },
+                { line: cur.line, ch: cur.ch }
+            )
+            cm.setCursor({ line: cur.line + 1, ch: 4 })
+        }
+    },
+    {
+        text:        'always_comb',
+        displayText: 'always — always @(*) combinational',
+        hint: function (cm) {
+            const cur = cm.getCursor()
+            const tok = cm.getTokenAt(cur)
+            cm.replaceRange(
+                'always @(*) begin\n    \nend',
+                { line: cur.line, ch: tok.start },
+                { line: cur.line, ch: cur.ch }
+            )
+            cm.setCursor({ line: cur.line + 1, ch: 4 })
+        }
+    },
+    {
+        text:        'case',
+        displayText: 'case — case statement skeleton',
+        hint: function (cm) {
+            const cur = cm.getCursor()
+            const tok = cm.getTokenAt(cur)
+            cm.replaceRange(
+                'case (sel)\n    2\'b00: ;\n    2\'b01: ;\n    default: ;\nendcase',
+                { line: cur.line, ch: tok.start },
+                { line: cur.line, ch: cur.ch }
+            )
+            cm.setCursor({ line: cur.line + 1, ch: 10 })
+        }
+    }
+]
+
+function extractSignalNames(code) {
+    const names = []
+    const re = /\b(?:input|output|inout|wire|reg)\s+(?:$$\d+:\d+$$\s+)?(\w+)/g
+    let m
+    while ((m = re.exec(code)) !== null) {
+        if (!VERILOG_KEYWORDS.includes(m[1])) names.push(m[1])
+    }
+    const rp = /\bparameter\s+(\w+)/g
+    while ((m = rp.exec(code)) !== null) names.push(m[1])
+    return [...new Set(names)]
+}
+
+function verilogHint(cm) {
+    const cursor = cm.getCursor()
+    const token  = cm.getTokenAt(cursor)
+    const word   = token.string.trim()
+
+    if (token.type === 'comment' || token.type === 'string') return
+    if (!word || word.length < 1) return
+
+    const code    = cm.getValue()
+    const signals = extractSignalNames(code)
+
+    const snippetMatches = VERILOG_SNIPPETS.filter(s =>
+        s.text.startsWith(word) && s.text !== word
+    )
+
+    const wordMatches = [...VERILOG_KEYWORDS, ...signals]
+        .filter(k => k.startsWith(word) && k !== word)
+        .map(k => ({ text: k, displayText: k }))
+
+    const list = [...snippetMatches, ...wordMatches]
+    if (!list.length) return
+
+    return {
+        list,
+        from: CodeMirror.Pos(cursor.line, token.start),
+        to:   CodeMirror.Pos(cursor.line, cursor.ch)
+    }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -644,7 +836,7 @@ function maxNodesInAnyLayer(layerNodes, numLayers) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  Yosys JSON → CircuitVerse device/connector format
+//  Yosys JSON to CircuitVerse device/connector format
 // ════════════════════════════════════════════════════════════════════════════
 
 function findTopModule(modules, preferred) {
@@ -657,7 +849,6 @@ function findTopModule(modules, preferred) {
     return names[names.length - 1]
 }
 
-// ── Emit a Constant device for Yosys literal bits ("0","1","x","z") ─────────
 function emitConstantBit(bit, receiverId, receiverPort, devices, connectors) {
     if (typeof bit !== 'string') return false
     const constId = 'const_' + receiverId + '_' + receiverPort + '_' + bit
@@ -685,11 +876,10 @@ function convertYosysToDigitalJs(yosysJson, preferredTop) {
     const devices    = {}
     const connectors = []
     let dc = 0
-    const drivers   = {}  // bit-index → { id, port }
-    const receivers = []  // { bit, id, port }
+    const drivers   = {}
+    const receivers = []
     let po = 0
 
-    // ── Ports ─────────────────────────────────────────────────────────────
     for (const pName in top.ports) {
         const p    = top.ports[pName]
         const id   = 'dev' + dc++
@@ -707,7 +897,6 @@ function convertYosysToDigitalJs(yosysJson, preferredTop) {
         }
     }
 
-    // ── Cell type map ──────────────────────────────────────────────────────
     const CMAP = {
         '$_AND_':     'And',      '$_OR_':      'Or',       '$_NOT_':    'Not',
         '$_NAND_':    'Nand',     '$_NOR_':     'Nor',      '$_XOR_':    'Xor',
@@ -730,7 +919,6 @@ function convertYosysToDigitalJs(yosysJson, preferredTop) {
     }
     const OMAP = { 'Y': 'out', 'Q': 'out' }
 
-    // ── Cells ──────────────────────────────────────────────────────────────
     for (const cName in top.cells) {
         const cell = top.cells[cName]
         const type = CMAP[cell.type]
@@ -752,7 +940,6 @@ function convertYosysToDigitalJs(yosysJson, preferredTop) {
                     if (typeof b === 'number') {
                         receivers.push({ bit: b, id, port })
                     } else if (typeof b === 'string') {
-                        // ── Constant bit ("0","1","x","z") — emit Constant device ──
                         emitConstantBit(b, id, port, devices, connectors)
                     }
                 })
@@ -760,17 +947,13 @@ function convertYosysToDigitalJs(yosysJson, preferredTop) {
                 const port = OMAP[pName] || pName.toLowerCase()
                 bits.forEach(b => {
                     if (typeof b === 'number') {
-                        if (!drivers[b]) {
-                            drivers[b] = { id, port }
-                        }
-                        // else: feedback/multi-driver wire — silently skip
+                        if (!drivers[b]) drivers[b] = { id, port }
                     }
                 })
             }
         }
     }
 
-    // ── Wire up connectors ─────────────────────────────────────────────────
     for (const r of receivers) {
         const d = drivers[r.bit]
         if (d) {
@@ -795,6 +978,11 @@ function convertYosysToDigitalJs(yosysJson, preferredTop) {
 // ════════════════════════════════════════════════════════════════════════════
 
 function renderVerilogCircuit(circuitData, verilogCode, scope, source) {
+    if (window._verilogErrorMarker) {
+        window._verilogErrorMarker.clear()
+        window._verilogErrorMarker = null
+    }
+
     scope.initialize()
     for (var id of scope.verilogMetadata.subCircuitScopeIds)
         delete scopeList[id]
@@ -817,6 +1005,7 @@ function renderVerilogCircuit(circuitData, verilogCode, scope, source) {
 
     showMessage('Verilog Circuit Successfully Created')
     setVerilogOutput('Verilog Circuit Successfully Created (via ' + source + ')', 'success')
+    finishSynthesis()
     update(scope)
     verilogModeSet(false)
 }
@@ -877,11 +1066,20 @@ function centerViewportOnScope(scope) {
     }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+//  CodeMirror setup
+// ════════════════════════════════════════════════════════════════════════════
+
 export function setupCodeMirrorEnvironment() {
     var myTextarea = document.getElementById('codeTextArea')
 
+    CodeMirror.registerHelper('hint', 'verilog', verilogHint)
+
     CodeMirror.commands.autocomplete = function (cm) {
-        cm.showHint({ hint: CodeMirror.hint.anyword })
+        cm.showHint({
+            hint: verilogHint,
+            completeSingle: false
+        })
     }
 
     editor = CodeMirror.fromTextArea(myTextarea, {
@@ -893,7 +1091,14 @@ export function setupCodeMirrorEnvironment() {
         matchBrackets: true,
         smartIndent: true,
         indentWithTabs: true,
-        extraKeys: { 'Ctrl-Space': 'autocomplete' },
+        extraKeys: {
+            'Ctrl-Space': function (cm) {
+                cm.showHint({
+                    hint: verilogHint,
+                    completeSingle: false
+                })
+            }
+        },
     })
 
     if (!localStorage.getItem('verilog-theme')) {
