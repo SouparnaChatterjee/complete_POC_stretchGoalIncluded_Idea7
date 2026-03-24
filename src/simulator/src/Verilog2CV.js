@@ -39,8 +39,8 @@ var editor
 var verilogMode = false
 
 // ─── WASM worker state ───────────────────────────────────────────────────────
-var wasmWorker = null
-var wasmReadyPromise = null
+var wasmWorker        = null
+var wasmReadyPromise  = null
 
 function initWasmWorker() {
     if (wasmReadyPromise) return wasmReadyPromise
@@ -48,6 +48,7 @@ function initWasmWorker() {
     wasmReadyPromise = new Promise(function (resolve, reject) {
         try {
             wasmWorker = new Worker('/yosys-worker.js')
+
             wasmWorker.onmessage = function (e) {
                 if (e.data.type === 'ready') {
                     console.log('[Yosys WASM] Worker ready')
@@ -56,8 +57,9 @@ function initWasmWorker() {
                     reject(new Error(e.data.message))
                 }
             }
+
             wasmWorker.onerror = function (err) {
-                wasmWorker = null
+                wasmWorker       = null
                 wasmReadyPromise = null
                 reject(new Error(err.message))
             }
@@ -71,8 +73,8 @@ function initWasmWorker() {
 }
 
 function shouldUseWasm() {
-    if (window.__TAURI__) return true
-    if (window.__yosysWasmEnabled) return true
+    if (window.__TAURI__)           return true
+    if (window.__yosysWasmEnabled)  return true
     return false
 }
 
@@ -101,17 +103,24 @@ export async function createVerilogCircuit() {
 }
 
 export function saveVerilogCode() {
+    // ── Get code from CodeMirror editor ──────────────────────────────────
     var code = editor ? editor.getValue() : ''
 
+    // ── Fallback to raw textarea if editor not ready ──────────────────────
     if (!code || code.trim() === '// Write Some Verilog Code Here!') {
         const ta = document.getElementById('codeTextArea')
-        if (ta && ta.value && ta.value.trim() !== '// Write Some Verilog Code Here!') {
+        if (
+            ta &&
+            ta.value &&
+            ta.value.trim() !== '// Write Some Verilog Code Here!'
+        ) {
             code = ta.value
         }
     }
 
     console.log('[SaveCode] length:', code.length)
     console.log('[SaveCode] preview:', code.substring(0, 100))
+
     globalScope.verilogMetadata.code = code
     generateVerilogCircuit(code)
 }
@@ -121,7 +130,7 @@ export function applyVerilogTheme(theme) {
     editor.setOption('theme', theme)
 }
 
-// ─── Progress bar helpers ────────────────────────────────────────────────────
+// ─── Progress bar helpers ─────────────────────────────────────────────────────
 function setSynthStage(index) {
     if (window.verilogTerminal?.setSynthStage) {
         window.verilogTerminal.setSynthStage(index)
@@ -139,24 +148,17 @@ function resetSynthesis() {
         window.verilogTerminal.resetSynthesis()
     }
 }
-// ────────────────────────────────────────────────────────────────────────────
 
 function setVerilogOutput(text, type = 'info') {
     if (typeof window !== 'undefined' && window.verilogTerminal) {
         window.verilogTerminal.addMessage(text, type)
     } else {
-        const verilogOutputDiv = document.getElementById('verilogOutput')
-        if (verilogOutputDiv) {
-            if (type === 'error') {
-                verilogOutputDiv.innerHTML = text
-                verilogOutputDiv.style.color = '#ff6b6b'
-            } else if (type === 'success') {
-                verilogOutputDiv.innerHTML = text
-                verilogOutputDiv.style.color = '#51cf66'
-            } else {
-                verilogOutputDiv.innerHTML = text
-                verilogOutputDiv.style.color = ''
-            }
+        const el = document.getElementById('verilogOutput')
+        if (el) {
+            el.innerHTML     = text
+            el.style.color   =
+                type === 'error'   ? '#ff6b6b' :
+                type === 'success' ? '#51cf66' : ''
         }
     }
 }
@@ -165,10 +167,8 @@ function clearVerilogOutput() {
     if (typeof window !== 'undefined' && window.verilogTerminal) {
         window.verilogTerminal.clearOutput()
     } else {
-        const verilogOutputDiv = document.getElementById('verilogOutput')
-        if (verilogOutputDiv) {
-            verilogOutputDiv.innerHTML = ''
-        }
+        const el = document.getElementById('verilogOutput')
+        if (el) el.innerHTML = ''
     }
 }
 
@@ -196,30 +196,24 @@ function savedCodeHasModule() {
 export function verilogModeSet(mode) {
     if (mode == verilogMode) return
     verilogMode = mode
+
     if (mode) {
         const code_window = document.getElementById('code-window')
-        if (code_window)
-            document.getElementById('code-window').style.display = 'block'
+        if (code_window) code_window.style.display = 'block'
 
         const elementPanel = document.querySelector('.elementPanel')
-        if (elementPanel)
-            document.querySelector('.elementPanel').style.display = 'none'
+        if (elementPanel) elementPanel.style.display = 'none'
 
         const timingDiagramPanel = document.querySelector('.timing-diagram-panel')
-        if (timingDiagramPanel)
-            document.querySelector('.timing-diagram-panel').style.display = 'none'
+        if (timingDiagramPanel) timingDiagramPanel.style.display = 'none'
 
         const quickBtn = document.querySelector('.quick-btn')
-        if (quickBtn)
-            document.querySelector('.quick-btn').style.display = 'none'
+        if (quickBtn) quickBtn.style.display = 'none'
 
         const verilogEditorPanel = document.getElementById('verilogEditorPanel')
-        if (verilogEditorPanel)
-            document.getElementById('verilogEditorPanel').style.display = 'block'
+        if (verilogEditorPanel) verilogEditorPanel.style.display = 'block'
 
-        if (editor) {
-            setTimeout(() => editor.refresh(), 10)
-        }
+        if (editor) setTimeout(() => editor.refresh(), 10)
 
         if (!embed) {
             simulationArea.lastSelected = globalScope.root
@@ -227,30 +221,23 @@ export function verilogModeSet(mode) {
             showProperties(simulationArea.lastSelected)
         }
 
-        if (savedCodeHasModule()) {
-            resetVerilogCode()
-        }
+        if (savedCodeHasModule()) resetVerilogCode()
 
     } else {
         const code_window = document.getElementById('code-window')
-        if (code_window)
-            document.getElementById('code-window').style.display = 'none'
+        if (code_window) code_window.style.display = 'none'
 
         const elementPanel = document.querySelector('.elementPanel')
-        if (elementPanel)
-            document.querySelector('.elementPanel').style.display = ''
+        if (elementPanel) elementPanel.style.display = ''
 
         const timingDiagramPanel = document.querySelector('.timing-diagram-panel')
-        if (timingDiagramPanel)
-            document.querySelector('.timing-diagram-panel').style.display = ''
+        if (timingDiagramPanel) timingDiagramPanel.style.display = ''
 
         const quickBtn = document.querySelector('.quick-btn')
-        if (quickBtn)
-            document.querySelector('.quick-btn').style.display = ''
+        if (quickBtn) quickBtn.style.display = ''
 
         const verilogEditorPanel = document.getElementById('verilogEditorPanel')
-        if (verilogEditorPanel)
-            document.getElementById('verilogEditorPanel').style.display = 'none'
+        if (verilogEditorPanel) verilogEditorPanel.style.display = 'none'
     }
 }
 
@@ -262,19 +249,16 @@ class verilogSubCircuit {
     }
 
     getPort(portName) {
-        var numInputs = this.circuit.inputNodes.length
+        var numInputs  = this.circuit.inputNodes.length
         var numOutputs = this.circuit.outputNodes.length
 
         for (let i = 0; i < numInputs; i++) {
-            if (this.circuit.data.Input[i].label == portName) {
+            if (this.circuit.data.Input[i].label == portName)
                 return this.circuit.inputNodes[i]
-            }
         }
-
         for (let i = 0; i < numOutputs; i++) {
-            if (this.circuit.data.Output[i].label == portName) {
+            if (this.circuit.data.Output[i].label == portName)
                 return this.circuit.outputNodes[i]
-            }
         }
     }
 }
@@ -288,11 +272,13 @@ export function YosysJSON2CV(
 ) {
     var parentID = parentScope.id
     var subScope
+
     if (root) {
         subScope = parentScope
     } else {
         subScope = newCircuit(name, undefined, true, false)
     }
+
     var circuitDevices = {}
 
     for (var subCircuitName in JSON.subcircuits) {
@@ -311,8 +297,7 @@ export function YosysJSON2CV(
             const subCircuitName = JSON.devices[device].celltype
             circuitDevices[device] = new verilogSubCircuit(
                 new SubCircuit(
-                    500,
-                    500,
+                    500, 500,
                     undefined,
                     subCircuitScope[subCircuitName]
                 )
@@ -346,13 +331,15 @@ export function YosysJSON2CV(
         var toPortNode   = toObj.getPort(toPort)
 
         if (!fromPortNode) {
-            console.warn('[YosysJSON2CV] Missing port "' + fromPort + '" on ' + fromId
-                + ' (' + (JSON.devices[fromId]?.type || '?') + ')')
+            console.warn('[YosysJSON2CV] Missing port "' + fromPort +
+                '" on ' + fromId +
+                ' (' + (JSON.devices[fromId]?.type || '?') + ')')
             continue
         }
         if (!toPortNode) {
-            console.warn('[YosysJSON2CV] Missing port "' + toPort + '" on ' + toId
-                + ' (' + (JSON.devices[toId]?.type || '?') + ')')
+            console.warn('[YosysJSON2CV] Missing port "' + toPort +
+                '" on ' + toId +
+                ' (' + (JSON.devices[toId]?.type || '?') + ')')
             continue
         }
 
@@ -383,9 +370,9 @@ export default function generateVerilogCircuit(
 function synthesizeWithServer(verilogCode, scope) {
     var params = { code: verilogCode }
     fetch('/api/v1/simulator/verilogcv', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params),
+        body:    JSON.stringify(params),
     })
         .then((response) => {
             if (!response.ok) throw response
@@ -437,7 +424,9 @@ function extractTopModule(code) {
 
 function synthesizeWithWasm(verilogCode, scope) {
     setSynthStage(0)
-    setVerilogOutput('Synthesizing with Yosys WASM (client-side, no server)...', 'info')
+    setVerilogOutput(
+        'Synthesizing with Yosys WASM (client-side, no server)...', 'info'
+    )
 
     var readyPromise = initWasmWorker()
 
@@ -466,6 +455,7 @@ function doWasmSynthesis(verilogCode, scope) {
     console.log('[WASM] Top module:', topModule || '(auto-top)')
     console.log('[WASM] Code length:', verilogCode.length)
 
+    // ── Reset onmessage for this synthesis request ────────────────────────
     wasmWorker.onmessage = function (e) {
         var msg = e.data
 
@@ -477,7 +467,10 @@ function doWasmSynthesis(verilogCode, scope) {
                 setSynthStage(1)
                 var circuitData = convertYosysToDigitalJs(msg.json, topModule)
 
-                if (!circuitData.devices || Object.keys(circuitData.devices).length === 0) {
+                if (
+                    !circuitData.devices ||
+                    Object.keys(circuitData.devices).length === 0
+                ) {
                     resetSynthesis()
                     setVerilogOutput(
                         'Synthesis succeeded but no devices were produced. ' +
@@ -487,7 +480,7 @@ function doWasmSynthesis(verilogCode, scope) {
                     return
                 }
 
-                // ── Gate count stats ──────────────────────────────
+                // ── Stats ─────────────────────────────────────────────
                 const allDevices  = Object.values(circuitData.devices)
                 const gateCount   = allDevices.filter(d =>
                     !['Input', 'Output', 'Constant'].includes(d.type)
@@ -495,17 +488,16 @@ function doWasmSynthesis(verilogCode, scope) {
                 const inputCount  = allDevices.filter(d => d.type === 'Input').length
                 const outputCount = allDevices.filter(d => d.type === 'Output').length
                 const wireCount   = circuitData.connectors.length
+
                 setVerilogOutput(
-                    'Gates: ' + gateCount +
-                    ' | Wires: ' + wireCount +
+                    'Gates: '   + gateCount  +
+                    ' | Wires: '  + wireCount  +
                     ' | Inputs: ' + inputCount +
-                    ' | Outputs: ' + outputCount,
+                    ' | Outputs: '+ outputCount,
                     'info'
                 )
-                // ─────────────────────────────────────────────────
 
                 setSynthStage(2)
-                console.log('[WASM] Devices:', Object.keys(circuitData.devices).length)
                 setVerilogOutput('Synthesis complete. Running layout...', 'info')
 
                 setSynthStage(3)
@@ -514,6 +506,7 @@ function doWasmSynthesis(verilogCode, scope) {
                 setSynthStage(4)
                 setVerilogOutput('Rendering circuit on canvas...', 'info')
                 renderVerilogCircuit(circuitData, verilogCode, scope, 'WASM')
+
             } catch (err) {
                 resetSynthesis()
                 console.error('[WASM] Render error:', err)
@@ -535,19 +528,23 @@ function doWasmSynthesis(verilogCode, scope) {
         resetSynthesis()
         console.error('[WASM] Worker crashed:', err)
         setVerilogOutput('Worker error: ' + err.message, 'error')
-        wasmWorker = null
+        wasmWorker       = null
         wasmReadyPromise = null
     }
 
+    // ── Send ONLY the verilog string — no files map ───────────────────────
+    // The files map caused the bug: buildFileMap() was racing with editor
+    // population and sending empty/stale content.
+    // The worker always uses the verilog string directly now.
     wasmWorker.postMessage({
-        verilog: verilogCode,
+        verilog:   verilogCode,
         topModule: topModule,
         requestId: requestId
     })
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  FEATURE 6 — Error line highlighting
+//  Error line highlighting
 // ════════════════════════════════════════════════════════════════════════════
 
 function highlightErrorLine(errorMessage) {
@@ -558,15 +555,17 @@ function highlightErrorLine(errorMessage) {
         window._verilogErrorMarker = null
     }
 
-    const lineMatch = errorMessage.match(/input\.v:(\d+)/)
-        || errorMessage.match(/:(\d+):/)
+    const fileMatch = errorMessage.match(/(\w+\.(?:v|sv)):(\d+)/)
+    const bareMatch = errorMessage.match(/:(\d+):/)
 
-    if (!lineMatch) {
+    let lineNum = null
+    if (fileMatch)     lineNum = parseInt(fileMatch[2]) - 1
+    else if (bareMatch) lineNum = parseInt(bareMatch[1]) - 1
+
+    if (lineNum === null || isNaN(lineNum)) {
         console.warn('[Highlight] No line number found in error:', errorMessage)
         return
     }
-
-    const lineNum = parseInt(lineMatch[1]) - 1
 
     window._verilogErrorMarker = editor.markText(
         { line: lineNum, ch: 0 },
@@ -581,7 +580,7 @@ function highlightErrorLine(errorMessage) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  FEATURE 5 — Verilog-aware autocomplete
+//  Verilog-aware autocomplete
 // ════════════════════════════════════════════════════════════════════════════
 
 const VERILOG_KEYWORDS = [
@@ -644,7 +643,7 @@ const VERILOG_SNIPPETS = [
             const cur = cm.getCursor()
             const tok = cm.getTokenAt(cur)
             cm.replaceRange(
-                'case (sel)\n    2\'b00: ;\n    2\'b01: ;\n    default: ;\nendcase',
+                "case (sel)\n    2'b00: ;\n    2'b01: ;\n    default: ;\nendcase",
                 { line: cur.line, ch: tok.start },
                 { line: cur.line, ch: cur.ch }
             )
@@ -655,6 +654,7 @@ const VERILOG_SNIPPETS = [
 
 function extractSignalNames(code) {
     const names = []
+    // Correct regex for Verilog bit-width: [N:M]
     const re = /\b(?:input|output|inout|wire|reg)\s+(?:$$\d+:\d+$$\s+)?(\w+)/g
     let m
     while ((m = re.exec(code)) !== null) {
@@ -759,7 +759,8 @@ function computeLayeredLayout(circuitData) {
 
     const maxLogicLayer = Math.max(0, ...allIds
         .filter(id => devices[id].type !== 'Output')
-        .map(id => layer[id] ?? 0))
+        .map(id => layer[id] ?? 0)
+    )
 
     allIds.forEach(id => {
         if (devices[id].type === 'Output') {
@@ -767,10 +768,10 @@ function computeLayeredLayout(circuitData) {
         }
     })
 
-    const numLayers = maxLogicLayer + 2
-
+    const numLayers  = maxLogicLayer + 2
     const layerNodes = {}
     for (let l = 0; l < numLayers; l++) layerNodes[l] = []
+
     allIds.forEach(id => {
         const l = layer[id] ?? 0
         layerNodes[l] = layerNodes[l] || []
@@ -800,8 +801,7 @@ function computeLayeredLayout(circuitData) {
     const NODE_HEIGHT = 90
     const ORIGIN_X    = 150
     const ORIGIN_Y    = 150
-
-    const newDevices = { ...devices }
+    const newDevices  = { ...devices }
 
     for (let l = 0; l < numLayers; l++) {
         const nodes  = layerNodes[l] || []
@@ -809,7 +809,6 @@ function computeLayeredLayout(circuitData) {
         const startY = ORIGIN_Y + Math.max(0,
             (maxNodesInAnyLayer(layerNodes, numLayers) * NODE_HEIGHT - totalH) / 2
         )
-
         nodes.forEach((id, rowIdx) => {
             newDevices[id] = {
                 ...devices[id],
@@ -822,7 +821,8 @@ function computeLayeredLayout(circuitData) {
     }
 
     console.log('[Layout] Layers:', numLayers,
-                '| Max nodes/layer:', maxNodesInAnyLayer(layerNodes, numLayers))
+                '| Max nodes/layer:',
+                maxNodesInAnyLayer(layerNodes, numLayers))
 
     return { ...circuitData, devices: newDevices }
 }
@@ -836,7 +836,7 @@ function maxNodesInAnyLayer(layerNodes, numLayers) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  Yosys JSON to CircuitVerse device/connector format
+//  Yosys JSON → CircuitVerse device/connector format
 // ════════════════════════════════════════════════════════════════════════════
 
 function findTopModule(modules, preferred) {
@@ -852,11 +852,11 @@ function findTopModule(modules, preferred) {
 function emitConstantBit(bit, receiverId, receiverPort, devices, connectors) {
     if (typeof bit !== 'string') return false
     const constId = 'const_' + receiverId + '_' + receiverPort + '_' + bit
-    const val = (bit === '1') ? 1 : 0
+    const val     = (bit === '1') ? 1 : 0
     devices[constId] = { type: 'Constant', value: val, bits: 1 }
     connectors.push({
-        from: { id: constId, port: 'out' },
-        to:   { id: receiverId, port: receiverPort },
+        from:             { id: constId, port: 'out' },
+        to:               { id: receiverId, port: receiverPort },
         source_positions: []
     })
     return true
@@ -864,7 +864,8 @@ function emitConstantBit(bit, receiverId, receiverPort, devices, connectors) {
 
 function convertYosysToDigitalJs(yosysJson, preferredTop) {
     const modules = yosysJson.modules || {}
-    if (!Object.keys(modules).length) throw new Error('No modules in Yosys output')
+    if (!Object.keys(modules).length)
+        throw new Error('No modules in Yosys output')
 
     const topName = findTopModule(modules, preferredTop)
     const top     = modules[topName]
@@ -875,66 +876,242 @@ function convertYosysToDigitalJs(yosysJson, preferredTop) {
 
     const devices    = {}
     const connectors = []
-    let dc = 0
-    const drivers   = {}
-    const receivers = []
-    let po = 0
+    let   dc         = 0
+    const drivers    = {}
+    const receivers  = []
+    let   po         = 0
 
+    // ── Port devices ──────────────────────────────────────────────────────
     for (const pName in top.ports) {
         const p    = top.ports[pName]
         const id   = 'dev' + dc++
         const bits = p.bits || []
+        const w    = bits.length || 1
+
         if (p.direction === 'input') {
-            devices[id] = { type: 'Input', net: pName, order: po++, bits: bits.length }
+            devices[id] = { type: 'Input', net: pName, order: po++, bits: w }
             bits.forEach(b => {
                 if (typeof b === 'number') drivers[b] = { id, port: 'out' }
             })
         } else if (p.direction === 'output') {
-            devices[id] = { type: 'Output', net: pName, order: po++, bits: bits.length }
+            devices[id] = { type: 'Output', net: pName, order: po++, bits: w }
             bits.forEach(b => {
-                if (typeof b === 'number') receivers.push({ bit: b, id, port: 'in' })
+                if (typeof b === 'number')
+                    receivers.push({ bit: b, id, port: 'in' })
             })
         }
     }
 
+    // ── Cell type map ─────────────────────────────────────────────────────
     const CMAP = {
-        '$_AND_':     'And',      '$_OR_':      'Or',       '$_NOT_':    'Not',
-        '$_NAND_':    'Nand',     '$_NOR_':     'Nor',      '$_XOR_':    'Xor',
-        '$_XNOR_':    'Xnor',    '$_BUF_':     'Repeater', '$_MUX_':    'Mux',
-        '$_DFF_P_':   'Dff',     '$_DFF_N_':   'Dff',
-        '$_DFFE_PP_': 'Dff',     '$_SR_PP_':   'Dff',
-        '$and':       'And',     '$or':        'Or',        '$not':      'Not',
-        '$xor':       'Xor',     '$xnor':      'Xnor',
-        '$mux':       'Mux',     '$pmux':      'Mux',
-        '$reduce_and':'And',     '$reduce_or': 'Or',        '$reduce_xor':'Xor',
-        '$reduce_bool':'Or',     '$logic_not': 'Not',
-        '$logic_and': 'And',     '$logic_or':  'Or',
-        '$dff':       'Dff',     '$adff':      'Dff',       '$buf':      'Repeater',
+        // Liberty post-techmap basic gates
+        '$_AND_':        'And',
+        '$_OR_':         'Or',
+        '$_NOT_':        'Not',
+        '$_NAND_':       'Nand',
+        '$_NOR_':        'Nor',
+        '$_XOR_':        'Xor',
+        '$_XNOR_':       'Xnor',
+        '$_BUF_':        'Repeater',
+        // Liberty mux
+        '$_MUX_':        'Mux',
+        '$_MUX4_':       'Mux',
+        '$_MUX8_':       'Mux',
+        '$_MUX16_':      'Mux',
+        // Liberty flip-flops
+        '$_DFF_P_':      'Dff',
+        '$_DFF_N_':      'Dff',
+        '$_DFFE_PP_':    'Dff',
+        '$_DFFE_PN_':    'Dff',
+        '$_DFFE_NP_':    'Dff',
+        '$_DFFE_NN_':    'Dff',
+        '$_SDFF_PP0_':   'Dff',
+        '$_SDFF_PP1_':   'Dff',
+        '$_SDFF_NP0_':   'Dff',
+        '$_SDFF_NP1_':   'Dff',
+        '$_SDFFE_PP0P_': 'Dff',
+        '$_SDFFE_PP0N_': 'Dff',
+        '$_SDFFE_PP1P_': 'Dff',
+        '$_SDFFE_PP1N_': 'Dff',
+        '$_ADFF_PP0_':   'Dff',
+        '$_ADFF_PP1_':   'Dff',
+        '$_ADFF_NP0_':   'Dff',
+        '$_ADFF_NP1_':   'Dff',
+        '$_DLATCH_P_':   'Dff',
+        '$_DLATCH_N_':   'Dff',
+        '$_SR_PP_':      'Dff',
+        '$_SR_PN_':      'Dff',
+        '$_SR_NP_':      'Dff',
+        '$_SR_NN_':      'Dff',
+        // RTL basic gates
+        '$and':          'And',
+        '$or':           'Or',
+        '$not':          'Not',
+        '$nand':         'Nand',
+        '$nor':          'Nor',
+        '$xor':          'Xor',
+        '$xnor':         'Xnor',
+        '$buf':          'Repeater',
+        // RTL mux
+        '$mux':          'Mux',
+        '$pmux':         'Mux',
+        '$tribuf':       'TriState',
+        // RTL arithmetic
+        '$add':          'Adder',
+        '$sub':          'Adder',
+        '$mul':          'Multiplier',
+        '$div':          'Divider',
+        '$mod':          'Modulo',
+        '$pow':          'Multiplier',
+        '$neg':          'Adder',
+        // RTL comparison
+        '$eq':           'Comparator',
+        '$ne':           'Comparator',
+        '$lt':           'Comparator',
+        '$le':           'Comparator',
+        '$gt':           'Comparator',
+        '$ge':           'Comparator',
+        '$eqx':          'Comparator',
+        '$nex':          'Comparator',
+        // RTL shift
+        '$shl':          'ShiftLeft',
+        '$shr':          'ShiftRight',
+        '$sshl':         'ShiftLeft',
+        '$sshr':         'ShiftRight',
+        '$shift':        'ShiftRight',
+        '$shiftx':       'ShiftRight',
+        // RTL reduction
+        '$reduce_and':   'And',
+        '$reduce_or':    'Or',
+        '$reduce_xor':   'Xor',
+        '$reduce_xnor':  'Xnor',
+        '$reduce_bool':  'Or',
+        // RTL logic
+        '$logic_not':    'Not',
+        '$logic_and':    'And',
+        '$logic_or':     'Or',
+        // RTL flip-flops
+        '$dff':          'Dff',
+        '$dffe':         'Dff',
+        '$adff':         'Dff',
+        '$adffe':        'Dff',
+        '$sdff':         'Dff',
+        '$sdffe':        'Dff',
+        '$sdffce':       'Dff',
+        '$dlatch':       'Dff',
+        '$adlatch':      'Dff',
+        '$sr':           'Dff',
+        // RTL concat/slice
+        '$concat':       'Splitter',
+        '$slice':        'Splitter',
+        '$pos':          'Repeater',
+        '$zero_ext':     'Repeater',
+        '$sign_ext':     'Repeater',
     }
 
     const IMAP = {
-        'A': 'in1', 'B': 'in2', 'S': 'sel',
-        'C': 'clk', 'D': 'in',  'R': 'rst', 'E': 'en',
-        'CLK': 'clk', 'ARST': 'rst', 'EN': 'en',
+        'A':     'in1',
+        'B':     'in2',
+        'C':     'clk',
+        'D':     'in',
+        'E':     'en',
+        'EN':    'en',
+        'S':     'sel',
+        'R':     'rst',
+        'RST':   'rst',
+        'CLK':   'clk',
+        'ARST':  'rst',
+        'SRST':  'rst',
+        'SET':   'set',
+        'CLR':   'clr',
+        'CI':    'cin',
+        'BI':    'binv',
+        'X':     'in1',
+        'Y':     'in2',
+        'ALOAD': 'load',
+        'AD':    'adata',
     }
-    const OMAP = { 'Y': 'out', 'Q': 'out' }
 
+    const OMAP = {
+        'Y':  'out',
+        'Q':  'out',
+        'CO': 'cout',
+        'X':  'out',
+    }
+
+    // ── Cell devices ──────────────────────────────────────────────────────
     for (const cName in top.cells) {
-        const cell = top.cells[cName]
-        const type = CMAP[cell.type]
-        if (!type) {
-            console.warn('[Converter] Skipping unknown cell type:', cell.type)
+        const cell   = top.cells[cName]
+        const cvType = CMAP[cell.type]
+
+        if (!cvType) {
+            console.warn('[Converter] Skipping unknown cell type:',
+                         cell.type, '— cell:', cName)
             continue
         }
-        const id = 'dev' + dc++
-        devices[id] = { type, label: cName }
+
+        const id     = 'dev' + dc++
+        const params = cell.parameters || {}
+        const aWidth = parseInt(params.A_WIDTH || params.WIDTH || 1)
+        const bWidth = parseInt(params.B_WIDTH || params.WIDTH || 1)
+        const yWidth = parseInt(params.Y_WIDTH || params.WIDTH || 1)
+
+        const deviceProps = { type: cvType, label: cName }
+
+        if (cvType === 'Adder') {
+            deviceProps.bits   = Math.max(aWidth, yWidth)
+            deviceProps.is_sub = (cell.type === '$sub') ? 1 : 0
+        }
+        if (cvType === 'Multiplier' || cvType === 'Divider' ||
+            cvType === 'Modulo') {
+            deviceProps.bits = Math.max(aWidth, yWidth)
+        }
+        if (cvType === 'Comparator') {
+            deviceProps.bits = aWidth
+            deviceProps.op   = cell.type
+        }
+        if (cvType === 'ShiftLeft' || cvType === 'ShiftRight') {
+            deviceProps.bits = yWidth
+        }
+        if (cvType === 'Splitter') {
+            deviceProps.bits = yWidth
+        }
+        if (cvType === 'Mux') {
+            deviceProps.bits = Math.max(aWidth, bWidth, yWidth, 1)
+        }
+        if (cvType === 'Dff') {
+            deviceProps.bits     = yWidth || 1
+            deviceProps.polarity = {}
+            deviceProps.polarity.clock =
+                !(cell.type.includes('_N_') || cell.type === '$_DFF_N_')
+            if (params.ARST_POLARITY !== undefined) {
+                deviceProps.polarity.arst =
+                    (parseInt(params.ARST_POLARITY) === 1)
+            }
+            if (params.EN_POLARITY !== undefined) {
+                deviceProps.polarity.enable =
+                    (parseInt(params.EN_POLARITY) === 1)
+            }
+            if (params.ARST_VALUE !== undefined) {
+                deviceProps.arst_value = params.ARST_VALUE
+            }
+        }
+
+        devices[id] = deviceProps
 
         for (const pName in cell.connections) {
             const bits = cell.connections[pName]
             const dir  = cell.port_directions?.[pName]
-                || (OMAP[pName] ? 'output' : 'input')
+                || (OMAP[pName] !== undefined ? 'output' : 'input')
 
-            if (dir === 'input') {
+            if (dir === 'output') {
+                const port = OMAP[pName] || pName.toLowerCase()
+                bits.forEach(b => {
+                    if (typeof b === 'number') {
+                        if (!drivers[b]) drivers[b] = { id, port }
+                    }
+                })
+            } else {
                 const port = IMAP[pName] || pName.toLowerCase()
                 bits.forEach(b => {
                     if (typeof b === 'number') {
@@ -943,31 +1120,26 @@ function convertYosysToDigitalJs(yosysJson, preferredTop) {
                         emitConstantBit(b, id, port, devices, connectors)
                     }
                 })
-            } else if (dir === 'output') {
-                const port = OMAP[pName] || pName.toLowerCase()
-                bits.forEach(b => {
-                    if (typeof b === 'number') {
-                        if (!drivers[b]) drivers[b] = { id, port }
-                    }
-                })
             }
         }
     }
 
+    // ── Connect receivers to drivers ──────────────────────────────────────
     for (const r of receivers) {
         const d = drivers[r.bit]
         if (d) {
             connectors.push({
-                from: { id: d.id, port: d.port },
-                to:   { id: r.id, port: r.port },
+                from:             { id: d.id, port: d.port },
+                to:               { id: r.id, port: r.port },
                 source_positions: []
             })
         } else {
-            console.warn('[Converter] No driver for bit', r.bit, '— receiver:', r)
+            console.warn('[Converter] No driver for bit', r.bit,
+                         '→ receiver:', r.id, r.port)
         }
     }
 
-    console.log('[Converter] Devices:', Object.keys(devices).length,
+    console.log('[Converter] ✅ Devices:', Object.keys(devices).length,
                 '| Connectors:', connectors.length)
 
     return { name: topName, devices, connectors, subcircuits: {} }
@@ -1000,11 +1172,12 @@ function renderVerilogCircuit(circuitData, verilogCode, scope, source) {
 
     scope.verilogMetadata.subCircuitScopeIds = Object.values(subCircuitScope)
     changeCircuitName(circuitData.name)
-
     centerViewportOnScope(scope)
 
     showMessage('Verilog Circuit Successfully Created')
-    setVerilogOutput('Verilog Circuit Successfully Created (via ' + source + ')', 'success')
+    setVerilogOutput(
+        'Verilog Circuit Successfully Created (via ' + source + ')', 'success'
+    )
     finishSynthesis()
     update(scope)
     verilogModeSet(false)
@@ -1012,9 +1185,10 @@ function renderVerilogCircuit(circuitData, verilogCode, scope, source) {
 
 function centerViewportOnScope(scope) {
     try {
-        if (!scope || !scope.CircuitElement || !scope.CircuitElement.length) return
+        if (!scope || !scope.CircuitElement || !scope.CircuitElement.length)
+            return
 
-        let minX = Infinity, minY = Infinity
+        let minX = Infinity,  minY = Infinity
         let maxX = -Infinity, maxY = -Infinity
 
         scope.CircuitElement.forEach(el => {
@@ -1046,11 +1220,10 @@ function centerViewportOnScope(scope) {
 
         if (simulationArea) {
             simulationArea.scale = scale
-
             const newOx = vpW / 2 - centerX * scale
             const newOy = vpH / 2 - centerY * scale
-
-            if (simulationArea.offset && typeof simulationArea.offset === 'object') {
+            if (simulationArea.offset &&
+                typeof simulationArea.offset === 'object') {
                 simulationArea.offset.x = newOx
                 simulationArea.offset.y = newOy
             } else {
@@ -1076,27 +1249,21 @@ export function setupCodeMirrorEnvironment() {
     CodeMirror.registerHelper('hint', 'verilog', verilogHint)
 
     CodeMirror.commands.autocomplete = function (cm) {
-        cm.showHint({
-            hint: verilogHint,
-            completeSingle: false
-        })
+        cm.showHint({ hint: verilogHint, completeSingle: false })
     }
 
     editor = CodeMirror.fromTextArea(myTextarea, {
-        mode: 'verilog',
-        autoRefresh: true,
-        styleActiveLine: true,
-        lineNumbers: true,
+        mode:              'verilog',
+        autoRefresh:       true,
+        styleActiveLine:   true,
+        lineNumbers:       true,
         autoCloseBrackets: true,
-        matchBrackets: true,
-        smartIndent: true,
-        indentWithTabs: true,
+        matchBrackets:     true,
+        smartIndent:       true,
+        indentWithTabs:    true,
         extraKeys: {
             'Ctrl-Space': function (cm) {
-                cm.showHint({
-                    hint: verilogHint,
-                    completeSingle: false
-                })
+                cm.showHint({ hint: verilogHint, completeSingle: false })
             }
         },
     })
@@ -1104,8 +1271,7 @@ export function setupCodeMirrorEnvironment() {
     if (!localStorage.getItem('verilog-theme')) {
         localStorage.setItem('verilog-theme', 'default')
     } else {
-        const prevtheme = localStorage.getItem('verilog-theme')
-        editor.setOption('theme', prevtheme)
+        editor.setOption('theme', localStorage.getItem('verilog-theme'))
     }
 
     editor.setValue('// Write Some Verilog Code Here!')
