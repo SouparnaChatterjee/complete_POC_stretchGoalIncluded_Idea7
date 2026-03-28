@@ -3,9 +3,9 @@
 
 'use strict';
 
-var runYosys  = null;
-var YosysExit = null;
-var wasmLoaded = false;
+var runYosys    = null;
+var YosysExit   = null;
+var wasmLoaded  = false;
 var pendingMessages = [];
 
 function postError(msg, requestId) {
@@ -16,21 +16,36 @@ function postError(msg, requestId) {
     });
 }
 
-// ── Load WASM ─────────────────────────────────────────────────────────────────
+// ── Load converter + WASM ─────────────────────────────────────────────────────
 Promise.resolve()
     .then(function () {
+        // importScripts is synchronous — sets self.yosys2digitaljs as global
+        try {
+            importScripts('/yosys2digitaljs-browser.js');
+            if (typeof self.yosys2digitaljs === 'function') {
+                console.log('[Worker] yosys2digitaljs core loaded');
+            } else {
+                console.warn('[Worker] yosys2digitaljs not found after importScripts');
+            }
+        } catch (e) {
+            console.warn('[Worker] Could not load yosys2digitaljs core:', e.message);
+            // non-fatal — main thread will use manual fallback converter
+        }
+
         return import('/yosys-bundle.js');
     })
     .then(function (mod) {
         runYosys  = mod.runYosys;
         YosysExit = mod.Exit || mod.YosysExit || null;
+
         if (typeof runYosys !== 'function') {
             throw new Error(
                 'runYosys is not a function. Keys: ' +
                 Object.keys(mod).join(', ')
             );
         }
-        // warm-up run — intentionally swallow error
+
+        // warm-up run — swallow error intentionally
         return runYosys([], {}, { synchronously: false }).catch(function () {});
     })
     .then(function () {
@@ -42,10 +57,11 @@ Promise.resolve()
     })
     .catch(function (err) {
         var msg = (err && err.message) ? err.message : String(err);
-        console.error('[Worker] Failed to load Yosys WASM:', msg);
+        console.error('[Worker] Failed to load:', msg);
         postError('Failed to load Yosys WASM: ' + msg);
     });
 
+// ── Message queue ─────────────────────────────────────────────────────────────
 self.onmessage = function (e) {
     if (!wasmLoaded) {
         pendingMessages.push(e);
@@ -66,52 +82,65 @@ function handleMessage(e) {
         return;
     }
 
-    // ── ALWAYS use verilog string as primary source of truth ─────────────
-    // Do NOT trust the files map — it may contain stale/empty content
-    // from buildFileMap() being called before editor is populated.
-    var primaryCode = String(verilog || '').trim();
+    // ── Build VFS input map ───────────────────────────────────────────────
+    var inputFiles;
+    var fileNames;
 
-    console.log('[Worker] Received verilog length:', primaryCode.length);
-    console.log('[Worker] Received files:', files ? Object.keys(files) : 'none');
-    console.log('[Worker] Primary code preview:', primaryCode.substring(0, 100));
+    if (files && typeof files === 'object' && Object.keys(files).length > 0) {
+        // multi-file path — filter out empty files
+        var filtered = {};
+        Object.keys(files).forEach(function (name) {
+            var content = String(files[name] || '').trim();
+            if (content.length > 0) filtered[name] = content;
+        });
 
-    // Always build from primary verilog string
-    if (!primaryCode || primaryCode.length < 5) {
-        postError('Empty Verilog code received by worker.', requestId);
-        return;
+        if (Object.keys(filtered).length > 0) {
+            inputFiles = filtered;
+            fileNames  = Object.keys(filtered);
+            console.log('[Worker] Multi-file mode:', fileNames);
+        } else {
+            var code = String(verilog || '').trim();
+            if (!code) { postError('Empty Verilog code.', requestId); return; }
+            inputFiles = { 'input.v': code };
+            fileNames  = ['input.v'];
+        }
+    } else {
+        // single-file path
+        var primaryCode = String(verilog || '').trim();
+        if (!primaryCode || primaryCode.length < 5) {
+            postError('Empty Verilog code received by worker.', requestId);
+            return;
+        }
+        inputFiles = { 'input.v': primaryCode };
+        fileNames  = ['input.v'];
     }
 
-    var inputFiles = { 'input.v': primaryCode };
-    var fileNames  = ['input.v'];
-
-    // ── Validate — simple check, no stripping that could break things ─────
-    // Just look for the word 'module' in the raw code
-    if (primaryCode.indexOf('module') === -1) {
+    // ── Validate ──────────────────────────────────────────────────────────
+    var allCode = Object.values(inputFiles).join('\n');
+    if (allCode.indexOf('module') === -1) {
         postError('No module declaration found in code.', requestId);
         return;
     }
 
-    console.log('[Worker] Validation passed. Has module: true');
+    console.log('[Worker] Files:', fileNames);
+    console.log('[Worker] Total code length:', allCode.length);
+    console.log('[Worker] Top module:', topModule || '(auto-top)');
 
     // ── Build Yosys script ────────────────────────────────────────────────
     var hierarchyCmd = topModule
         ? 'hierarchy -top ' + topModule
         : 'hierarchy -auto-top';
 
+    var readCmd = 'read_verilog ' + fileNames.join(' ');
+
     var script = [
-        'read_verilog input.v',
+        readCmd,
         hierarchyCmd,
-        'proc',
-        'opt',
-        'memory',
-        'techmap',
-        'opt',
-        'clean',
+        'proc', 'opt', 'memory', 'techmap', 'opt', 'clean',
         'write_json output.json'
     ].join('; ');
 
-    console.log('[Worker] Running script:', script);
-    console.log('[Worker] Top module:', topModule || '(auto-top)');
+    console.log('[Worker] Script:', script);
 
     var stdoutChunks = [];
     var stderrChunks = [];
@@ -140,21 +169,21 @@ function handleMessage(e) {
                 : Object.keys(result || {})
         );
 
+        // ── Extract output.json ───────────────────────────────────────────
         var jsonRaw = (result instanceof Map)
             ? result.get('output.json')
             : (result && result['output.json']);
 
         if (!jsonRaw) {
-            var stderr = stderrChunks.join('');
-            console.error('[Worker] No output.json. Stderr:', stderr);
             postError(
                 'Yosys produced no output.json.\nStderr:\n' +
-                stderr.slice(0, 800),
+                stderrChunks.join('').slice(0, 800),
                 requestId
             );
             return;
         }
 
+        // ── Parse Yosys JSON ──────────────────────────────────────────────
         var jsonText = (typeof jsonRaw === 'string')
             ? jsonRaw
             : new TextDecoder().decode(jsonRaw);
@@ -176,12 +205,45 @@ function handleMessage(e) {
             return;
         }
 
-        console.log('[Worker] Success. Modules:',
-            Object.keys(parsed.modules));
+        console.log('[Worker] Modules found:', Object.keys(parsed.modules));
 
+        // ── Convert using yosys2digitaljs core ────────────────────────────
+        // If core loaded successfully via importScripts, use it
+        // Otherwise send raw JSON and let main thread use manual fallback
+        var converted;
+        var usedCore = false;
+
+        if (typeof self.yosys2digitaljs === 'function') {
+            try {
+                converted = self.yosys2digitaljs(parsed, {});
+                usedCore  = true;
+                console.log('[Worker] Core conversion done. Devices:',
+                    Object.keys(converted.devices || {}).length,
+                    '| Connectors:', (converted.connectors || []).length
+                );
+            } catch (ce) {
+                console.warn('[Worker] Core conversion failed, using fallback:', ce.message);
+            }
+        }
+
+        if (!usedCore) {
+            // raw JSON — main thread convertYosysToDigitalJs() handles it
+            self.postMessage({
+                type:      'success',
+                json:      parsed,
+                converted: false,
+                stdout:    stdoutChunks.join(''),
+                stderr:    stderrChunks.join(''),
+                requestId: requestId
+            });
+            return;
+        }
+
+        // already converted to DigitalJS format
         self.postMessage({
             type:      'success',
-            json:      parsed,
+            json:      converted,
+            converted: true,
             stdout:    stdoutChunks.join(''),
             stderr:    stderrChunks.join(''),
             requestId: requestId
