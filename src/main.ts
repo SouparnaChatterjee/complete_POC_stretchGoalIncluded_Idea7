@@ -25,4 +25,16 @@ app.use(createPinia());
 app.use(vuetify);
 app.use(router);
 app.use(i18n);
+
+// Service Worker: cache Yosys WASM assets 
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+        .then(function (reg) {
+            console.log('[SW] Registered:', reg.scope)
+        })
+        .catch(function (err) {
+            console.warn('[SW] Registration failed:', err)
+        })
+}
+
 app.mount("#app");
