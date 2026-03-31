@@ -38,7 +38,7 @@ import { toRefs } from 'vue'
 var editor
 var verilogMode = false
 
-// ─── WASM worker state ───────────────────────────────────────────────────────
+//WASM worker state 
 var wasmWorker       = null
 var wasmReadyPromise = null
 
@@ -128,7 +128,7 @@ export function applyVerilogTheme(theme) {
     editor.setOption('theme', theme)
 }
 
-// ─── Progress bar helpers ─────────────────────────────────────────────────────
+// Progress bar helpers 
 function setSynthStage(index) {
     if (window.verilogTerminal?.setSynthStage) {
         window.verilogTerminal.setSynthStage(index)
@@ -463,7 +463,7 @@ function doWasmSynthesis(verilogCode, scope) {
             try {
                 setSynthStage(1)
 
-                // ── Use pre-converted data from worker ────────────────────
+                // Use pre-converted data from worker
                 // Worker runs yosys2digitaljs core internally when available
                 // msg.converted === true means json is already DigitalJS format
                 // Fall back to manual convertYosysToDigitalJs() if flag missing
@@ -489,7 +489,7 @@ function doWasmSynthesis(verilogCode, scope) {
                     return
                 }
 
-                // ── Gate count stats ──────────────────────────────────────
+                // Gate count stats 
                 const allDevices  = Object.values(circuitData.devices)
                 const gateCount   = allDevices.filter(d =>
                     !['Input', 'Output', 'Constant'].includes(d.type)
@@ -555,10 +555,7 @@ function doWasmSynthesis(verilogCode, scope) {
         requestId: requestId
     })
 }
-
-// ════════════════════════════════════════════════════════════════════════════
 //  Error line highlighting
-// ════════════════════════════════════════════════════════════════════════════
 
 function highlightErrorLine(errorMessage) {
     if (!editor) return
@@ -592,9 +589,7 @@ function highlightErrorLine(errorMessage) {
     console.log('[Highlight] Error at line', lineNum + 1)
 }
 
-// ════════════════════════════════════════════════════════════════════════════
 //  Verilog-aware autocomplete
-// ════════════════════════════════════════════════════════════════════════════
 
 const VERILOG_KEYWORDS = [
     'module', 'endmodule', 'input', 'output', 'inout',
@@ -706,9 +701,7 @@ function verilogHint(cm) {
     }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  LAYERED AUTO-LAYOUT ENGINE
-// ════════════════════════════════════════════════════════════════════════════
+//  layered auto-layout engine
 
 function computeLayeredLayout(circuitData) {
     const devices    = circuitData.devices
@@ -847,10 +840,8 @@ function maxNodesInAnyLayer(layerNodes, numLayers) {
     return max
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  Yosys JSON → CircuitVerse device/connector format
-//  Kept as fallback if yosys2digitaljs core is unavailable in worker
-// ════════════════════════════════════════════════════════════════════════════
+
+//Yosys JSON->CircuitVerse device/connector format[Kept as fallback if yosys2digitaljs core is unavailable in worker]
 
 function findTopModule(modules, preferred) {
     const names = Object.keys(modules)
@@ -1010,9 +1001,8 @@ function convertYosysToDigitalJs(yosysJson, preferredTop) {
     return { name: topName, devices, connectors, subcircuits: {} }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
+
 //  Render
-// ════════════════════════════════════════════════════════════════════════════
 
 function renderVerilogCircuit(circuitData, verilogCode, scope, source) {
     if (window._verilogErrorMarker) {
@@ -1106,9 +1096,7 @@ function centerViewportOnScope(scope) {
     }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
 //  CodeMirror setup
-// ════════════════════════════════════════════════════════════════════════════
 
 export function setupCodeMirrorEnvironment() {
     var myTextarea = document.getElementById('codeTextArea')

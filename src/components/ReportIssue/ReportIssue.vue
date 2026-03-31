@@ -35,12 +35,13 @@
                             v-if="reportLabel"
                             id="report-label"
                             style="font-weight: lighter"
-                            ><b>{{
+                        >
+                            <b>{{
                                 $t(
                                     'simulator.panel_body.report_issue.describe_issue'
                                 )
-                            }}</b></label
-                        >
+                            }}</b>
+                        </label>
                         <div class="form-group">
                             <textarea
                                 v-if="issueText"
@@ -55,7 +56,8 @@
                             id="email-label"
                             for="emailtext"
                             style="font-weight: lighter"
-                            ><b>{{
+                        >
+                            <b>{{
                                 $t('simulator.panel_body.report_issue.email')
                             }}</b>
                             <span>
@@ -63,9 +65,9 @@
                                     $t(
                                         'simulator.panel_body.report_issue.optional'
                                     )
-                                }}</span
-                            >:</label
-                        >
+                                }}
+                            </span>:
+                        </label>
                         <div class="form-group">
                             <input
                                 v-if="issueEmail"
@@ -124,7 +126,7 @@ import { generateSaveData, generateImage } from '#/simulator/src/data/save'
 import ReportIssueButton from './ReportIssueButton.vue'
 import { ref, Ref } from 'vue'
 import { useAuthStore } from '#/store/authStore'
-import { getToken } from '#/pages/simulatorHandler.vue'
+import { apiFetch, getAuthToken } from '#/utils/api'
 
 const authStore = useAuthStore()
 const reportIssueOpen: Ref<boolean> = ref(false)
@@ -184,32 +186,32 @@ function reportIssue(): void {
     reportLabel.value = false
     emailLabel.value = false
 }
+
 async function postUserIssue(message: string): Promise<void> {
     let result: string | undefined
 
     try {
+        // apiFetch handles absolute URLs correctly — imgur is passed through
         const img = await generateImage('jpeg', 'full', false, 1, false).split(
             ','
         )[1]
-        const response = await fetch('https://api.imgur.com/3/image', {
+        const response = await apiFetch('https://api.imgur.com/3/image', {
             method: 'POST',
             headers: {
                 Authorization: 'Client-ID 9a33b3b370f1054', // eslint-disable-line
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: new URLSearchParams({
-                image: img,
-            }),
+            body: new URLSearchParams({ image: img }),
         })
         const data = await response.json()
         result = data?.data?.link
     } catch (err) {
-        console.error('Could not generate image, reporting anyway', err)
+        console.error('[ReportIssue] Could not generate image, reporting anyway:', err)
     }
 
     message += result ? `\n${result}` : ''
 
-    let circuitData: JSON | string
+    let circuitData: any
     try {
         circuitData = await generateSaveData('Untitled', false)
     } catch (err) {
@@ -217,23 +219,26 @@ async function postUserIssue(message: string): Promise<void> {
     }
 
     try {
-        // delay between requests
+        // 1 second delay between imgur upload and issue post
         await new Promise((resolve) => setTimeout(resolve, 1000))
 
-        const response = await fetch('/api/v1/simulator/post_issue', {
+        const token = getAuthToken()
+        const response = await apiFetch('/api/v1/simulator/post_issue', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Token ${getToken('cvt')}`,
+                ...(token ? { Authorization: `Token ${token}` } : {}),
             },
             body: JSON.stringify({
                 text: message,
                 circuit_data: circuitData,
             }),
         })
+
         const data = await response.json()
+        const resultEl = document.getElementById('result')
+
         if (data?.success) {
-            const resultEl = document.getElementById('result')
             if (resultEl) {
                 resultEl.innerHTML = `<i class='fa fa-check' style='color:green'></i> You've successfully submitted the issue. Thanks for improving our platform.`
             }
@@ -245,7 +250,7 @@ async function postUserIssue(message: string): Promise<void> {
         if (resultEl) {
             resultEl.innerHTML = `<i class='fa fa-minus-circle' style='color:red'></i> There seems to be a network issue. Please reach out to us at support@circuitverse.org`
         }
-        console.error(err)
+        console.error('[ReportIssue] Post issue failed:', err)
     }
 }
 </script>
@@ -265,7 +270,6 @@ async function postUserIssue(message: string): Promise<void> {
     background-color: var(--btn-danger-darken);
     border: 1px solid var(--btn-danger-darken);
 }
-
 .action-buttons {
     display: flex;
     align-items: center;

@@ -1,5 +1,4 @@
 ﻿// yosys-worker.js
-// Place in /public/yosys-worker.js
 
 'use strict';
 
@@ -16,7 +15,7 @@ function postError(msg, requestId) {
     });
 }
 
-// ── Load converter + WASM ─────────────────────────────────────────────────────
+// Load converter + WASM 
 Promise.resolve()
     .then(function () {
         // importScripts is synchronous — sets self.yosys2digitaljs as global
@@ -45,7 +44,7 @@ Promise.resolve()
             );
         }
 
-        // warm-up run — swallow error intentionally
+        // warm-up run:-swallow error intentionally
         return runYosys([], {}, { synchronously: false }).catch(function () {});
     })
     .then(function () {
@@ -61,7 +60,7 @@ Promise.resolve()
         postError('Failed to load Yosys WASM: ' + msg);
     });
 
-// ── Message queue ─────────────────────────────────────────────────────────────
+//Message queue 
 self.onmessage = function (e) {
     if (!wasmLoaded) {
         pendingMessages.push(e);
@@ -70,7 +69,7 @@ self.onmessage = function (e) {
     handleMessage(e);
 };
 
-// ── Main handler ──────────────────────────────────────────────────────────────
+//Main handler 
 function handleMessage(e) {
     var verilog   = e.data.verilog;
     var files     = e.data.files;
@@ -82,7 +81,7 @@ function handleMessage(e) {
         return;
     }
 
-    // ── Build VFS input map ───────────────────────────────────────────────
+    //Build VFS input map 
     var inputFiles;
     var fileNames;
 
@@ -115,7 +114,7 @@ function handleMessage(e) {
         fileNames  = ['input.v'];
     }
 
-    // ── Validate ──────────────────────────────────────────────────────────
+    // Validate 
     var allCode = Object.values(inputFiles).join('\n');
     if (allCode.indexOf('module') === -1) {
         postError('No module declaration found in code.', requestId);
@@ -126,7 +125,7 @@ function handleMessage(e) {
     console.log('[Worker] Total code length:', allCode.length);
     console.log('[Worker] Top module:', topModule || '(auto-top)');
 
-    // ── Build Yosys script ────────────────────────────────────────────────
+    //  Build Yosys script 
     var hierarchyCmd = topModule
         ? 'hierarchy -top ' + topModule
         : 'hierarchy -auto-top';
@@ -169,7 +168,7 @@ function handleMessage(e) {
                 : Object.keys(result || {})
         );
 
-        // ── Extract output.json ───────────────────────────────────────────
+        // Extract output.json 
         var jsonRaw = (result instanceof Map)
             ? result.get('output.json')
             : (result && result['output.json']);
@@ -183,7 +182,7 @@ function handleMessage(e) {
             return;
         }
 
-        // ── Parse Yosys JSON ──────────────────────────────────────────────
+        // Parse Yosys JSON 
         var jsonText = (typeof jsonRaw === 'string')
             ? jsonRaw
             : new TextDecoder().decode(jsonRaw);
@@ -207,9 +206,8 @@ function handleMessage(e) {
 
         console.log('[Worker] Modules found:', Object.keys(parsed.modules));
 
-        // ── Convert using yosys2digitaljs core ────────────────────────────
-        // If core loaded successfully via importScripts, use it
-        // Otherwise send raw JSON and let main thread use manual fallback
+        // Convert using yosys2digitaljs core 
+        // If core loaded successfully via importScripts, use it, otherwise send raw JSON and let main thread use manual fallback
         var converted;
         var usedCore = false;
 

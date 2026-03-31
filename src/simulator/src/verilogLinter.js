@@ -1,6 +1,5 @@
-/**
- * Verilog Linter for CircuitVerse CodeMirror Editor
- */
+
+// Verilog Linter for CircuitVerse CodeMirror Editor
 
 const VERILOG_KEYWORDS = [
     'module', 'endmodule', 'input', 'output', 'inout',
@@ -44,9 +43,7 @@ const KEYWORD_TYPOS = {
     'parmeter': 'parameter',
 }
 
-/**
- * Rule 1: Check module/endmodule matching
- */
+//Rule 1: Check module/endmodule matching
 function checkModuleBalance(lines) {
     const errors = []
     let moduleCount = 0
@@ -87,9 +84,8 @@ function checkModuleBalance(lines) {
     return errors
 }
 
-/**
- * Rule 2: Check begin/end matching
- */
+ //Rule 2: Check begin/end matching
+ 
 function checkBeginEndBalance(lines) {
     const errors = []
     let beginCount = 0
@@ -140,9 +136,7 @@ function checkBeginEndBalance(lines) {
     return errors
 }
 
-/**
- * Rule 3: Check for missing semicolons
- */
+ //Rule 3: Check for missing semicolons
 function checkMissingSemicolons(lines) {
     const errors = []
 
@@ -212,9 +206,7 @@ function checkMissingSemicolons(lines) {
     return errors
 }
 
-/**
- * Rule 4: Check for keyword typos
- */
+ //Rule 4: Check for keyword typos
 function checkKeywordTypos(lines) {
     const errors = []
 
@@ -239,10 +231,9 @@ function checkKeywordTypos(lines) {
     return errors
 }
 
-/**
- * Rule 5: Check port declarations
- * Handles both single-line and multiline module headers
- */
+
+//Rule 5: Check port declarations:Handles both single-line and multiline module headers
+
 function checkPortDeclarations(lines) {
     const errors = []
     let insideModule = false
@@ -352,9 +343,7 @@ function checkPortDeclarations(lines) {
     return errors
 }
 
-/**
- * Rule 6: Check for empty module body
- */
+ //Rule 6: Check for empty module body
 function checkEmptyModule(lines) {
     const errors = []
     let moduleStartLine = -1
@@ -394,9 +383,7 @@ function checkEmptyModule(lines) {
     return errors
 }
 
-/**
- * Rule 7: Check for assign to input ports
- */
+//Rule 7: Check for assign to input ports
 function checkAssignToInput(lines) {
     const errors = []
     let inputPorts = []
@@ -436,22 +423,17 @@ function checkAssignToInput(lines) {
     return errors
 }
 
-// ============================================
 // Helper Functions
-// ============================================
 
-/**
- * Strip multiline block comments while preserving line count
- */
+
+//Strip multiline block comments while preserving line count
 function stripBlockComments(code) {
     return code.replace(/\/\*[\s\S]*?\*\//g, (match) => {
         return match.replace(/[^\n]/g, ' ')
     })
 }
 
-/**
- * Strip both block comments and single-line comments from a line
- */
+//Strip both block comments and single-line comments from a line
 function stripComments(line) {
     let result = line.replace(/\/\*.*?\*\//g, '')
     const commentIndex = result.indexOf('//')
@@ -461,10 +443,7 @@ function stripComments(line) {
     return result
 }
 
-// ============================================
 // Main Lint Function
-// ============================================
-
 export function lintVerilog(code) {
     if (!code || !code.trim()) return []
 

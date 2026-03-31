@@ -16,7 +16,7 @@ import { showTourGuide } from './tutorials'
 import setupModules from './moduleSetup'
 import 'codemirror/lib/codemirror.css'
 import 'codemirror/addon/hint/show-hint.css'
-import 'codemirror/mode/javascript/javascript' // verilog.js from codemirror is not working because array prototype is changed.
+import 'codemirror/mode/javascript/javascript'
 import 'codemirror/addon/edit/closebrackets'
 import 'codemirror/addon/hint/anyword-hint'
 import 'codemirror/addon/hint/show-hint'
@@ -24,11 +24,11 @@ import { setupCodeMirrorEnvironment } from './Verilog2CV'
 import '../vendor/jquery-ui.min.css'
 import '../vendor/jquery-ui.min'
 import { confirmSingleOption } from '#/components/helpers/confirmComponent/ConfirmComponent.vue'
-import { getToken } from '#/pages/simulatorHandler.vue'
+import { apiFetch, getAuthToken } from '#/utils/api'
 
 /**
- * to resize window and setup things it
- * sets up new width for the canvas variables.
+ * To resize window and setup things.
+ * Sets up new width for the canvas variables.
  * Also redraws the grid.
  * @category setup
  */
@@ -46,37 +46,38 @@ export function resetup() {
     } else {
         height = document.getElementById('simulation').clientHeight * DPR
     }
-    // setup simulationArea and backgroundArea variables used to make changes to canvas.
+
     backgroundArea.setup()
     simulationArea.setup()
-    // redraw grid
     dots()
+
     document.getElementById('backgroundArea').style.height =
         height / DPR + 100 + 'px'
     document.getElementById('backgroundArea').style.width =
         width / DPR + 100 + 'px'
     document.getElementById('canvasArea').style.height = height / DPR + 'px'
+
     simulationArea.canvas.width = width
     simulationArea.canvas.height = height
     backgroundArea.canvas.width = width + 100 * DPR
     backgroundArea.canvas.height = height + 100 * DPR
+
     if (!embed) {
         plotArea.setup()
     }
+
     updateCanvasSet(true)
-    update() // INEFFICIENT, needs to be deprecated
+    update()
     simulationArea.prevScale = 0
     dots()
 }
 
-window.onresize = resetup // listener
-window.onorientationchange = resetup // listener
-
-// for mobiles
-window.addEventListener('orientationchange', resetup) // listener
+window.onresize = resetup
+window.onorientationchange = resetup
+window.addEventListener('orientationchange', resetup)
 
 /**
- * function to setup environment variables like projectId and DPR
+ * Function to setup environment variables like projectId and DPR
  * @category setup
  */
 function setupEnvironment() {
@@ -84,7 +85,6 @@ function setupEnvironment() {
     const projectId = generateId()
     window.projectId = projectId
     updateSimulationSet(true)
-    // const DPR = window.devicePixelRatio || 1 // unused variable
     newCircuit('Main')
     window.data = {}
     resetup()
@@ -93,55 +93,60 @@ function setupEnvironment() {
 
 /**
  * Fetches project data from API and loads it into the simulator.
- * @param {number} projectId The ID of the project to fetch data for
+ * Uses apiFetch — works on web (cookies) and Tauri (localStorage token).
+ * @param {number} projectId The ID of the project to fetch
  * @category setup
  */
 async function fetchProjectData(projectId) {
     try {
-        const response = await fetch(
+        const response = await apiFetch(
             `/api/v1/projects/${projectId}/circuit_data`,
             {
                 method: 'GET',
                 headers: {
                     Accept: 'application/json',
-                    Authorization: `Token ${getToken('cvt')}`,
+                    ...(getAuthToken()
+                        ? { Authorization: `Token ${getAuthToken()}` }
+                        : {}),
                 },
             }
         )
+
         if (response.ok) {
             const data = await response.json()
             await load(data)
             await simulationArea.changeClockTime(data.timePeriod || 500)
             $('.loadingIcon').fadeOut()
         } else {
-            throw new Error('API call failed')
+            throw new Error(`API call failed: ${response.status}`)
         }
     } catch (error) {
-        console.error(error)
+        console.error('[setup] fetchProjectData failed:', error)
         confirmSingleOption('Error: Could not load.')
         $('.loadingIcon').fadeOut()
     }
 }
 
 /**
- * Load project data immediately when available.
- * Improvement to eliminate delay caused by setTimeout in previous implementation revert if issues arise.
+ * Load project data when available.
  * @category setup
  */
 async function loadProjectData() {
     window.logixProjectId = window.logixProjectId ?? 0
+
     if (window.logixProjectId !== 0) {
         $('.loadingIcon').fadeIn()
         await fetchProjectData(window.logixProjectId)
-    } else if (localStorage.getItem('recover_login') && window.isUserLoggedIn) {
-        // Restore unsaved data and save
+    } else if (
+        localStorage.getItem('recover_login') &&
+        window.isUserLoggedIn
+    ) {
         const data = JSON.parse(localStorage.getItem('recover_login'))
         await load(data)
         localStorage.removeItem('recover')
         localStorage.removeItem('recover_login')
         await save()
     } else if (localStorage.getItem('recover')) {
-        // Restore unsaved data which didn't get saved due to error
         showMessage(
             "We have detected that you did not save your last work. Don't worry we have recovered them. Access them using Project->Recover"
         )
@@ -150,7 +155,6 @@ async function loadProjectData() {
 
 /**
  * Show tour guide if it hasn't been completed yet.
- * The tour is shown after a delay of 2 seconds.
  * @category setup
  */
 function showTour() {
@@ -162,9 +166,7 @@ function showTour() {
 }
 
 /**
- * The first function to be called to setup the whole simulator.
- * This function sets up the simulator environment, the UI, the listeners,
- * loads the project data, and shows the tour guide.
+ * The first function called to setup the whole simulator.
  * @category setup
  */
 export function setup() {
@@ -173,7 +175,6 @@ export function setup() {
         setupUI()
         startMainListeners()
     }
-    // startListeners()
     loadProjectData()
     showTour()
 }

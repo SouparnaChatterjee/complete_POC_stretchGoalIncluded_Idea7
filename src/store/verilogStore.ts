@@ -5,7 +5,7 @@ export const useVerilogStore = defineStore("verilogStore", () => {
   const isTerminalVisible = ref(false);
   const selectedTheme = ref(localStorage.getItem("verilog-theme") || "default");
 
-  // ── Progress bar state ──────────────────────────────────────
+  // Progress bar state
   const isSynthesizing = ref(false);
   const synthProgress  = ref(0);
   const synthStage     = ref('');
@@ -54,7 +54,7 @@ export const useVerilogStore = defineStore("verilogStore", () => {
     synthColor.value     = '#4dabf7'
     synthTime.value      = ''
   }
-  // ────────────────────────────────────────────────────────────
+
 
   const toggleTerminal = () => { isTerminalVisible.value = !isTerminalVisible.value }
   const showTerminal   = () => { isTerminalVisible.value = true }

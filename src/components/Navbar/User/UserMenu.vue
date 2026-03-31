@@ -25,7 +25,9 @@
           class="list-item-avatar"
           :prepend-avatar="authStore.getUserAvatar"
           :prepend-icon="
-            authStore.getUserAvatar === 'default' ? 'mdi-account-circle-outline' : undefined
+            authStore.getUserAvatar === 'default'
+              ? 'mdi-account-circle-outline'
+              : undefined
           "
           :title="authStore.getUsername"
           lines="two"
@@ -136,7 +138,9 @@
             size="large"
             color="white"
           ></v-icon>
-          <span class="ml-2 text-white" style="font-size: 1.2rem">{{ authStore.getUsername }}</span>
+          <span class="ml-2 text-white" style="font-size: 1.2rem">
+            {{ authStore.getUsername }}
+          </span>
         </v-btn>
       </v-main>
     </v-layout>
@@ -156,10 +160,10 @@
 
         <v-card-text class="pa-6">
           <v-form @submit.prevent="handleAuthSubmit" ref="authForm">
-            <v-text-field 
-              v-if="!isLoginMode" 
-              v-model="name" 
-              label="Name" 
+            <v-text-field
+              v-if="!isLoginMode"
+              v-model="name"
+              label="Name"
               type="text"
               :rules="[requiredRule]"
               variant="outlined"
@@ -206,7 +210,11 @@
                 size="small"
                 color="#43b984"
               >
-                {{ isLoginMode ? 'Need an account? Register' : 'Already have an account? Sign In' }}
+                {{
+                  isLoginMode
+                    ? 'Need an account? Register'
+                    : 'Already have an account? Sign In'
+                }}
               </v-btn>
             </div>
           </v-form>
@@ -222,7 +230,6 @@
       location="bottom right"
     >
       {{ snackbar.message }}
-
       <template v-slot:actions>
         <v-btn
           variant="text"
@@ -240,8 +247,8 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { availableLocale } from '#/locales/i18n'
 import { useAuthStore } from '#/store/authStore'
+import { apiFetch } from '#/utils/api'
 import { mdiClose } from '@mdi/js'
-// import { fetch } from '@tauri-apps/plugin-http' // Uncomment if using Tauri's HTTP plugin
 import './User.scss'
 
 const authStore = useAuthStore()
@@ -259,123 +266,137 @@ const unreadCount = ref(0)
 // Form validation rules
 const requiredRule = (v: string) => !!v || 'This field is required'
 const emailRule = (v: string) => /.+@.+\..+/.test(v) || 'E-mail must be valid'
-const passwordRule = (v: string) => v.length >= 6 || 'Password must be at least 6 characters'
+const passwordRule = (v: string) =>
+    v.length >= 6 || 'Password must be at least 6 characters'
 
 // Snackbar state
 const snackbar = ref({
-  visible: false,
-  message: '',
-  color: '#43b984'
+    visible: false,
+    message: '',
+    color: '#43b984',
 })
 
 function showAuthModal(login: boolean) {
-  isLoginMode.value = login
-  authModal.value = true
-  drawer.value = false
-  email.value = ''
-  password.value = ''
-  name.value = ''
+    isLoginMode.value = login
+    authModal.value = true
+    drawer.value = false
+    email.value = ''
+    password.value = ''
+    name.value = ''
 }
 
 function toggleAuthMode() {
-  isLoginMode.value = !isLoginMode.value
+    isLoginMode.value = !isLoginMode.value
 }
 
 async function handleAuthSubmit() {
-  const { valid } = await authForm.value.validate()
-  if (!valid) return
+    const { valid } = await authForm.value.validate()
+    if (!valid) return
 
-  isLoading.value = true
+    isLoading.value = true
 
-  try {
-    const url = isLoginMode.value
-      ? 'http://localhost:4000/api/v1/auth/login'
-      : 'http://localhost:4000/api/v1/auth/signup'
+    try {
+        const path = isLoginMode.value
+            ? '/api/v1/auth/login'
+            : '/api/v1/auth/signup'
 
-    const body = isLoginMode.value
-      ? { email: email.value, password: password.value }
-      : { email: email.value, password: password.value, name: name.value }
+        const body = isLoginMode.value
+            ? { email: email.value, password: password.value }
+            : { email: email.value, password: password.value, name: name.value }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body)
-    })
+        const response = await apiFetch(path, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+        })
 
-    if (!response.ok) {
-      let errorData
-      try {
-        errorData = await response.json()
-      } catch (e) {
-        errorData = { message: 'An error occurred' }
-      }
-      handleLoginError(response.status, errorData)
-      return
+        if (!response.ok) {
+            let errorData
+            try {
+                errorData = await response.json()
+            } catch {
+                errorData = { message: 'An error occurred' }
+            }
+            handleLoginError(response.status, errorData)
+            return
+        }
+
+        const data = await response.json()
+
+        if (!data.token) {
+            throw new Error('No token received from server')
+        }
+
+        // Save token — also persists to localStorage via authStore
+        authStore.setToken(data.token)
+
+        // If the response includes user info, hydrate the store immediately
+        if (data.data) {
+            authStore.setUserInfo(data.data)
+        }
+
+        showSnackbar(
+            isLoginMode.value ? 'Login successful!' : 'Registration successful!',
+            'success'
+        )
+        authModal.value = false
+
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error)
+        console.error('[UserMenu] Auth failed:', error)
+        showSnackbar(`Authentication failed: ${msg}`, 'error')
+    } finally {
+        isLoading.value = false
     }
-
-    const data = await response.json()
-    
-    if (!data.token) {
-      throw new Error('No token received from server')
-    }
-    
-    authStore.setToken(data.token)
-    showSnackbar(
-      isLoginMode.value ? 'Login successful!' : 'Registration successful!',
-      'success'
-    )
-    authModal.value = false
-  } catch (error) {
-    showSnackbar(`Authentication failed: ${error.message}`, 'error')
-  } finally {
-    isLoading.value = false
-  }
 }
 
 function handleLoginError(status: number, errorData: any) {
-  switch (status) {
-    case 401:
-      showSnackbar('Invalid credentials', 'error')
-      break
-    case 404:
-      showSnackbar('User not found', 'error')
-      break
-    case 409:
-      showSnackbar('User already exists', 'error')
-      break
-    case 422:
-      showSnackbar('Invalid input data', 'error')
-      break
-    default:
-      showSnackbar(errorData.message || 'Authentication failed', 'error')
-  }
+    switch (status) {
+        case 401:
+            showSnackbar('Invalid credentials', 'error')
+            break
+        case 404:
+            showSnackbar('User not found', 'error')
+            break
+        case 409:
+            showSnackbar('User already exists', 'error')
+            break
+        case 422:
+            showSnackbar('Invalid input data', 'error')
+            break
+        default:
+            showSnackbar(errorData?.message || 'Authentication failed', 'error')
+    }
 }
 
-function showSnackbar(message: string, type: 'success' | 'error' | 'warning' | 'info') {
-  snackbar.value = {
-    visible: true,
-    message,
-    color: type
-  }
+function showSnackbar(
+    message: string,
+    type: 'success' | 'error' | 'warning' | 'info'
+) {
+    snackbar.value = {
+        visible: true,
+        message,
+        color: type,
+    }
 }
 
 function dashboard() {
-  window.location.href = `/users/${authStore.getUserId}`
+    window.location.href = `/users/${authStore.getUserId}`
 }
 
 function my_groups() {
-  window.location.href = `/users/${authStore.getUserId}/groups`
+    window.location.href = `/users/${authStore.getUserId}/groups`
 }
 
 function notifications() {
-  window.location.href = `/users/${authStore.getUserId}/notifications`
+    window.location.href = `/users/${authStore.getUserId}/notifications`
 }
 
 function signout() {
-  authStore.signOut()
-  showSnackbar('You have been logged out', 'info')
+    authStore.signOut()
+    showSnackbar('You have been logged out', 'info')
 }
 </script>

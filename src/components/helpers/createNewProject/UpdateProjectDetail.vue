@@ -14,9 +14,7 @@
                             Project Name:
                         </p>
                         <v-text-field
-                            v-model="
-                                promptStore.UpdateProjectDetail.projectName
-                            "
+                            v-model="promptStore.UpdateProjectDetail.projectName"
                             label="Project Name"
                             required
                         ></v-text-field>
@@ -37,11 +35,8 @@
                             Project Tags:
                         </p>
                         <v-text-field
-                            v-model="
-                                promptStore.UpdateProjectDetail.projectTags
-                            "
-                            label="Tag List (Enter your Project Tags divided by
-                            comma[,])"
+                            v-model="promptStore.UpdateProjectDetail.projectTags"
+                            label="Tag List (Enter your Project Tags divided by comma[,])"
                         ></v-text-field>
                     </div>
                     <div class="project-type one-line-input">
@@ -49,9 +44,7 @@
                             Project Type:
                         </p>
                         <v-select
-                            v-model="
-                                (promptStore.UpdateProjectDetail.projectType as Readonly<any>)
-                            "
+                            v-model="(promptStore.UpdateProjectDetail.projectType as Readonly<any>)"
                             :items="projectTypes"
                             label="Project Type"
                             required
@@ -59,9 +52,7 @@
                     </div>
                     <p>Description:</p>
                     <TextEditor
-                        v-model="
-                            promptStore.UpdateProjectDetail.projectDescription
-                        "
+                        v-model="promptStore.UpdateProjectDetail.projectDescription"
                         @toggleFullscreen="toggleFullscreen"
                     />
                 </v-form>
@@ -84,14 +75,12 @@
 <script lang="ts">
 import { usePromptStore } from '#/store/promptStore'
 import { useProjectStore } from '#/store/projectStore'
-import { ref } from 'vue'
-import TextEditor from './TextEditor.vue'
 import { useAuthStore } from '#/store/authStore'
 import {
     confirmMultiOption,
     confirmSingleOption,
 } from '../confirmComponent/ConfirmComponent.vue'
-import { getToken } from '#/pages/simulatorHandler.vue'
+import { apiFetch, getAuthToken } from '#/utils/api'
 
 interface dataType {
     project: {
@@ -111,79 +100,91 @@ export const UpdateProjectDetail = (data: dataType) => {
 </script>
 
 <script lang="ts" setup>
+import { ref } from 'vue'
+import TextEditor from './TextEditor.vue'
+import { usePromptStore } from '#/store/promptStore'
+import { useAuthStore } from '#/store/authStore'
+import {
+    confirmMultiOption,
+    confirmSingleOption,
+} from '../confirmComponent/ConfirmComponent.vue'
+import { apiFetch, getAuthToken } from '#/utils/api'
+
 const promptStore = usePromptStore()
 const isFullscreen = ref(false)
 const projectTypes = ref(['Public', 'Private', 'Limited access'])
 const buttonList = ref([
-    {
-        text: 'Cancel',
-        emitOption: 'cancel',
-    },
-    {
-        text: 'Open Edit Page',
-        emitOption: 'openEditPage',
-    },
-    {
-        text: 'Update',
-        emitOption: 'update',
-    },
+    { text: 'Cancel',         emitOption: 'cancel'       },
+    { text: 'Open Edit Page', emitOption: 'openEditPage' },
+    { text: 'Update',         emitOption: 'update'       },
 ])
 
 function toggleFullscreen() {
     isFullscreen.value = !isFullscreen.value
 }
 
-function updateProjectButton(selectedOption: string) {
+async function updateProjectButton(selectedOption: string) {
     promptStore.UpdateProjectDetail.activate = false
-    if (selectedOption == 'cancel') {
+
+    if (selectedOption === 'cancel') {
         window.location.href = `/simulatorvue/edit/${promptStore.getProjectId}`
+        return
     }
-    if (selectedOption == 'openEditPage') {
+
+    if (selectedOption === 'openEditPage') {
         window.location.href = `/users/${useAuthStore().getUserId}/projects/${
             promptStore.getProjectId
         }/edit`
+        return
     }
-    if (selectedOption == 'update') {
+
+    if (selectedOption === 'update') {
         const projectData = {
             project: {
-                name: promptStore.getProjectName, // returns string (project name)
-                tag_list: promptStore.getProjectTags, // getProjectTags must return a comma separated string (in case of multiple tags)
-                project_access_type: promptStore.getProjectType, // returns string (Public, Private, Limited access)
-                description: promptStore.getProjectDescription, // returns html text
+                name: promptStore.getProjectName,
+                tag_list: promptStore.getProjectTags,
+                project_access_type: promptStore.getProjectType,
+                description: promptStore.getProjectDescription,
             },
         }
 
-        const projectJson = JSON.stringify(projectData)
+        const token = getAuthToken()
 
-        fetch(`/api/v1/projects/${promptStore.getProjectId}?include=author`, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
-                Authorization: `Token ${getToken('cvt')}`,
-            },
-            body: projectJson,
-        })
-            .then((response) => {
-                if (response.ok) {
-                    successPrompt()
-                } else {
-                    failurePrompt()
+        try {
+            const response = await apiFetch(
+                `/api/v1/projects/${promptStore.getProjectId}?include=author`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        ...(token
+                            ? { Authorization: `Token ${token}` }
+                            : {}),
+                    },
+                    body: JSON.stringify(projectData),
                 }
-            })
-            .catch((error) => {
-                console.error('Error:', error)
-            })
+            )
+
+            if (response.ok) {
+                await successPrompt()
+            } else {
+                await failurePrompt()
+            }
+        } catch (error) {
+            console.error('[UpdateProjectDetail] Update failed:', error)
+            await failurePrompt()
+        }
     }
 }
 
 async function successPrompt() {
     const choice = await confirmMultiOption(
-        'project has been updated successfully',
+        'Project has been updated successfully',
         ['go to project', 'keep editing circuit']
     )
 
-    if (choice == 'go to project') {
+    if (choice === 'go to project') {
         window.location.href = `/users/${useAuthStore().getUserId}/projects/${
             promptStore.getProjectId
         }`
@@ -220,7 +221,6 @@ async function failurePrompt() {
 .CreateProject.fullscreen {
     height: 86vh;
 }
-
 .heading {
     font-size: 1.5rem;
     font-weight: 500;
@@ -228,7 +228,6 @@ async function failurePrompt() {
     padding: 0.5rem;
     text-align: center;
 }
-
 .one-line-input {
     display: flex;
     justify-content: center;
@@ -237,25 +236,20 @@ async function failurePrompt() {
 .one-line-input-title {
     margin: 1.3rem 0 0 0;
 }
-
 .tag-input-title,
 .project-type-title {
     margin-right: 0.4rem;
 }
-
 .cardBtn {
     width: fit-content;
     min-width: 50px;
     border: 1px solid #c5c5c5;
     padding: 5px 5px;
 }
-
 .cardBtn:hover {
     background: #c5c5c5;
     color: black;
 }
-
-/* media query for .messageBoxContent */
 @media screen and (max-width: 991px) {
     .CreateProject {
         width: 100vw;
